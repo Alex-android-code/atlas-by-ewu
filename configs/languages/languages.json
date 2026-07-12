@@ -1,0 +1,52 @@
+[
+  {
+    "code": "pl",
+    "name": "Polish",
+    "native_name": "Polski",
+    "flag": "PL",
+    "enabled": true,
+    "default": true
+  },
+  {
+    "code": "uk",
+    "name": "Ukrainian",
+    "native_name": "Українська",
+    "flag": "UA",
+    "enabled": true
+  },
+  {
+    "code": "ru",
+    "name": "Russian",
+    "native_name": "Русский",
+    "flag": "RU",
+    "enabled": true
+  },
+  {
+    "code": "en",
+    "name": "English",
+    "native_name": "English",
+    "flag": "EN",
+    "enabled": true
+  },
+  {
+    "code": "de",
+    "name": "German",
+    "native_name": "Deutsch",
+    "flag": "DE",
+    "enabled": true
+  },
+  {
+    "code": "es",
+    "name": "Spanish",
+    "native_name": "Español",
+    "flag": "ES",
+    "enabled": true
+  },
+  {
+    "code": "pt",
+    "name": "Portuguese",
+    "native_name": "Português",
+    "flag": "PT",
+    "enabled": true
+  }
+]

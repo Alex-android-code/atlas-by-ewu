@@ -1,0 +1,26 @@
+"""Role constants for ATLAS by EWU."""
+
+ROLE_GUEST = "guest"
+ROLE_CANDIDATE = "candidate"
+ROLE_EMPLOYER = "employer"
+ROLE_COORDINATOR = "coordinator"
+ROLE_ADMIN = "admin"
+
+PUBLIC_ROLES = (
+    ROLE_GUEST,
+    ROLE_CANDIDATE,
+    ROLE_EMPLOYER,
+)
+
+ADMIN_ROLES = (
+    ROLE_COORDINATOR,
+    ROLE_ADMIN,
+)
+
+ALL_ROLES = (
+    ROLE_GUEST,
+    ROLE_CANDIDATE,
+    ROLE_EMPLOYER,
+    ROLE_COORDINATOR,
+    ROLE_ADMIN,
+)

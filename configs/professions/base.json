@@ -1,0 +1,20 @@
+{
+  "professions": [
+    {
+      "code": "welder",
+      "name": "Welder",
+      "skill_tags": ["mig_mag", "tig", "technical_drawing", "metalwork"]
+    },
+    {
+      "code": "warehouse_worker",
+      "name": "Warehouse Worker",
+      "skill_tags": ["picking", "packing", "forklift_optional", "shift_work"]
+    },
+    {
+      "code": "driver",
+      "name": "Driver",
+      "skill_tags": ["license", "route_planning", "safety", "logistics"]
+    }
+  ]
+}
+

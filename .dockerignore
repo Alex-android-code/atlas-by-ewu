@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.Python
+.venv/
+venv/
+env/
+.env
+.git/
+.pytest_cache/
+data/memory/*.json
+data/db/*.json
+*.log

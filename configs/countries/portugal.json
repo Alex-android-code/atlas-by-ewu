@@ -1,0 +1,22 @@
+{
+  "code": "PT",
+  "name": "Portugal",
+  "currency": "EUR",
+  "languages": ["pt", "en"],
+  "phone_prefix": "+351",
+  "emergency_number": "112",
+  "work_model": {
+    "supports_relocation": true,
+    "requires_address_registration": true,
+    "default_contract_types": ["employment_contract", "fixed_term_contract"]
+  },
+  "documents": {
+    "candidate_required": ["passport_or_id", "cv", "work_permission_if_required", "tax_number_if_available"],
+    "employer_required": ["company_registration", "tax_number", "job_offer_terms"]
+  },
+  "compliance": {
+    "gdpr_required": true,
+    "worker_protection_review": true
+  }
+}
+

@@ -1,0 +1,1 @@
+"""Language resource extension point."""

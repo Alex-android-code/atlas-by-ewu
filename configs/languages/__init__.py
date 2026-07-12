@@ -1,0 +1,2 @@
+"""Language JSON files."""
+

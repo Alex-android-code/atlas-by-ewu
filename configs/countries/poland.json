@@ -1,0 +1,22 @@
+{
+  "code": "PL",
+  "name": "Poland",
+  "currency": "PLN",
+  "languages": ["pl", "uk", "ru", "en"],
+  "phone_prefix": "+48",
+  "emergency_number": "112",
+  "work_model": {
+    "supports_relocation": true,
+    "requires_address_registration": false,
+    "default_contract_types": ["umowa_o_prace", "umowa_zlecenie"]
+  },
+  "documents": {
+    "candidate_required": ["passport_or_id", "cv", "residence_card_or_visa_if_required", "pesel_if_available"],
+    "employer_required": ["company_registration", "nip", "job_offer_terms"]
+  },
+  "compliance": {
+    "gdpr_required": true,
+    "worker_protection_review": true
+  }
+}
+

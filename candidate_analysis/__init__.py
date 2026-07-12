@@ -1,0 +1,1 @@
+"""Candidate analysis extension point."""

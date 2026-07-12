@@ -1,0 +1,37 @@
+{
+  "code": "UA",
+  "name": "Ukraine",
+  "currency": "UAH",
+  "languages": [
+    "uk",
+    "ru",
+    "en"
+  ],
+  "phone_prefix": "+380",
+  "emergency_number": "112",
+  "work_model": {
+    "supports_relocation": true,
+    "requires_address_registration": false,
+    "default_contract_types": [
+      "employment_contract",
+      "civil_contract"
+    ]
+  },
+  "documents": {
+    "candidate_required": [
+      "passport_or_id",
+      "cv",
+      "tax_id_if_available",
+      "work_permission_if_required"
+    ],
+    "employer_required": [
+      "company_registration",
+      "tax_number",
+      "job_offer_terms"
+    ]
+  },
+  "compliance": {
+    "gdpr_required": true,
+    "worker_protection_review": true
+  }
+}
