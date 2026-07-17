@@ -168,3 +168,127 @@ class ActivityEvent(SerializableModel):
     correlation_id: str = field(default_factory=lambda: new_id("COR"))
     created_at: str = field(default_factory=utc_now_iso)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProfessionalDNA(SerializableModel):
+    user_id: str
+    personal_information: dict[str, Any] = field(default_factory=dict)
+    contact_information: dict[str, Any] = field(default_factory=dict)
+    current_location: dict[str, Any] = field(default_factory=dict)
+    relocation_preferences: dict[str, Any] = field(default_factory=dict)
+    professional_summary: str = ""
+    work_experience: list[dict[str, Any]] = field(default_factory=list)
+    education: list[dict[str, Any]] = field(default_factory=list)
+    skills: list[str] = field(default_factory=list)
+    languages: list[dict[str, Any]] = field(default_factory=list)
+    certificates: list[dict[str, Any]] = field(default_factory=list)
+    licenses: list[dict[str, Any]] = field(default_factory=list)
+    salary_expectations: dict[str, Any] = field(default_factory=dict)
+    preferred_roles: list[str] = field(default_factory=list)
+    preferred_industries: list[str] = field(default_factory=list)
+    preferred_countries: list[str] = field(default_factory=list)
+    employment_format: list[str] = field(default_factory=list)
+    career_goals: list[dict[str, Any]] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    development_areas: list[str] = field(default_factory=list)
+    document_status: dict[str, Any] = field(default_factory=dict)
+    profile_photo: dict[str, Any] = field(default_factory=dict)
+    uploaded_cv: dict[str, Any] = field(default_factory=dict)
+    agent_memory: list[str] = field(default_factory=list)
+    agent_recommendations: list[str] = field(default_factory=list)
+    profile_completeness: int = 0
+    verification_status: str = "draft"
+    id: str = field(default_factory=lambda: new_id("DNA"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentMemoryRecord(SerializableModel):
+    user_id: str
+    memory_type: str
+    content: str
+    source: str
+    importance: int = 1
+    is_active: bool = True
+    id: str = field(default_factory=lambda: new_id("MEM"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentAction(SerializableModel):
+    user_id: str
+    action_type: str
+    title: str
+    status: str = "planned"
+    requires_user_confirmation: bool = True
+    id: str = field(default_factory=lambda: new_id("ACTN"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentRecommendation(SerializableModel):
+    user_id: str
+    recommendation_type: str
+    title: str
+    rationale: str = ""
+    status: str = "new"
+    id: str = field(default_factory=lambda: new_id("REC"))
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CareerGoal(SerializableModel):
+    user_id: str
+    title: str
+    target_country: str | None = None
+    target_role: str | None = None
+    status: str = "active"
+    id: str = field(default_factory=lambda: new_id("GOAL"))
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Opportunity(SerializableModel):
+    user_id: str
+    title: str
+    opportunity_type: str
+    status: str = "test_mode"
+    id: str = field(default_factory=lambda: new_id("OPP"))
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UserPreference(SerializableModel):
+    user_id: str
+    language: str = "uk"
+    communication_tone: str = "friendly_professional"
+    notification_frequency: str = "important"
+    search_countries: list[str] = field(default_factory=list)
+    work_types: list[str] = field(default_factory=list)
+    proactive_recommendations_allowed: bool = False
+    agent_autonomy_level: str = "advisory"
+    id: str = field(default_factory=lambda: new_id("PREF"))
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Subscription(SerializableModel):
+    user_id: str
+    plan: str = "start"
+    status: str = "active"
+    feature_flags: dict[str, bool] = field(default_factory=dict)
+    id: str = field(default_factory=lambda: new_id("SUB"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)

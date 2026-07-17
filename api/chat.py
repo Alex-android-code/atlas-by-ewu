@@ -1,6 +1,7 @@
 ﻿"""Coordinator chat page HTML."""
 
-from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_LOGO_HTML
+from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_MARK_HTML
+from api.components.design_system import ATLAS_DESIGN_SYSTEM_CSS
 from api.observability import observability_body_html, observability_head_html
 
 
@@ -53,6 +54,7 @@ AI_CHAT_HTML = """
       mask-image: radial-gradient(circle at 50% 16%, black, transparent 72%);
     }
     {{BRAND_LOGO_CSS}}
+    {{ATLAS_DESIGN_SYSTEM_CSS}}
     header {
       min-height: 76px;
       display: flex;
@@ -777,7 +779,7 @@ AI_CHAT_HTML = """
       .ai-status-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .choice-grid { grid-template-columns: 1fr; }
     }
-    @media (max-width: 880px) {
+    @media (max-width: 980px) {
       header { align-items: flex-start; flex-direction: column; }
       nav { width: 100%; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
       .top-status { grid-template-columns: 1fr; }
@@ -800,11 +802,134 @@ AI_CHAT_HTML = """
       .ai-status-list, .cta-grid { grid-template-columns: 1fr; }
       .chat-head { align-items: flex-start; flex-direction: column; }
     }
+    .app {
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+    header {
+      min-height: 72px;
+    }
+    .top-status {
+      border-radius: 18px;
+      padding: 18px 20px;
+    }
+    .status-copy h1 {
+      font-weight: 760;
+      letter-spacing: -0.01em;
+    }
+    .status-copy p {
+      color: var(--atlas-muted);
+    }
+    .workspace {
+      grid-template-columns: minmax(0, 1.6fr) minmax(330px, 0.78fr);
+      gap: 16px;
+    }
+    .chat-shell {
+      border-radius: 18px;
+      min-height: calc(100vh - 210px);
+    }
+    .chat-head {
+      min-height: 76px;
+      background: rgba(255,255,255,0.026);
+    }
+    .agent-badge {
+      border-radius: 14px !important;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.11), rgba(255,255,255,0.04)) !important;
+      color: var(--atlas-gold-soft) !important;
+      box-shadow: none !important;
+    }
+    .messages {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.018), transparent 34%),
+        rgba(5,7,13,0.18);
+    }
+    .message-card {
+      border-radius: 16px !important;
+      line-height: 1.55;
+    }
+    .assistant-row .message-card {
+      background: rgba(255,255,255,0.055) !important;
+      border: 1px solid var(--atlas-line) !important;
+      color: rgba(238,241,246,0.86) !important;
+    }
+    .user-row .message-card {
+      background: rgba(214,178,94,0.13) !important;
+      border: 1px solid rgba(214,178,94,0.28) !important;
+      color: var(--atlas-white) !important;
+    }
+    .composer {
+      background: rgba(5,7,13,0.62);
+    }
+    .inputbar {
+      border-radius: 16px;
+      background: rgba(255,255,255,0.045);
+    }
+    .smart-dashboard {
+      border-radius: 18px;
+    }
+    .dashboard-card {
+      border-radius: 16px;
+    }
+    .dashboard-tab {
+      border-radius: 12px !important;
+    }
+    .dashboard-tab.active {
+      background: rgba(255,255,255,0.09) !important;
+      color: var(--atlas-white) !important;
+    }
+    .ai-status-list {
+      gap: 8px;
+    }
+    .ai-status-item {
+      border-radius: 12px !important;
+      background: rgba(255,255,255,0.04) !important;
+      border-color: var(--atlas-line) !important;
+    }
+    @media (max-width: 980px) {
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .chat-shell {
+        min-height: 640px;
+      }
+    }
+    @media (max-width: 620px) {
+      .app {
+        padding: 10px;
+        gap: 10px;
+      }
+      header { flex-direction: column; align-items: flex-start; }
+      header nav { width: 100%; }
+      .status-copy h1 { font-size: 22px; }
+      .status-copy p { font-size: 13px; }
+      .status-chips { display: none; }
+      .top-status { padding: 14px; }
+      .workspace { gap: 12px; }
+      .chat-head { min-height: 64px; padding: 14px; }
+      .agent-mini span { display: none; }
+      .ai-status-list { grid-template-columns: 1fr; }
+      .top-status {
+        padding: 16px;
+      }
+      .chat-shell, .smart-dashboard {
+        border-radius: 16px;
+      }
+      .chat-shell {
+        min-height: min(680px, calc(100vh - 170px));
+      }
+      .messages {
+        padding: 14px;
+      }
+      .composer {
+        padding: 12px;
+      }
+    }
   </style>
 </head>
 <body>
   <header>
-    {{BRAND_LOGO_HTML}}
+    {{BRAND_MARK_HTML}}
     <nav aria-label="Main navigation">
       <a href="/ai?intent=job" data-i18n="nav.jobs">Jobs</a>
       <a href="/employer" data-i18n="nav.employers">Employers</a>
@@ -964,6 +1089,14 @@ AI_CHAT_HTML = """
     const chatForm = document.getElementById("chat-form");
     const sendButton = chatForm.querySelector("button[type='submit']");
     let isSending = false;
+    let lastSubmittedMessage = "";
+    let lastSubmittedAt = 0;
+    function createRequestId() {
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+      }
+      return `chat-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
     const topUserStatus = document.getElementById("top-user-status");
     const crmVerification = document.getElementById("crm-verification");
     const dashProfession = document.getElementById("dash-profession");
@@ -1284,11 +1417,19 @@ AI_CHAT_HTML = """
     }
     async function sendMessage(text) {
       if (isSending) return;
+      const normalizedText = text.trim().replace(/\\s+/g, " ");
+      const now = Date.now();
+      if (normalizedText && normalizedText === lastSubmittedMessage && now - lastSubmittedAt < 3000) return;
+      const requestId = createRequestId();
+      lastSubmittedMessage = normalizedText;
+      lastSubmittedAt = now;
       isSending = true;
       sendButton.disabled = true;
+      const selectedLanguage = window.AtlasI18n?.state?.uiLanguage || localStorage.getItem("atlas_language");
       const detectedConversationLanguage = window.AtlasI18n?.detectConversationLanguageFromText(text);
-      if (detectedConversationLanguage && detectedConversationLanguage !== "unknown") {
-        window.AtlasI18n?.setConversationLanguage(detectedConversationLanguage);
+      const conversationLanguage = selectedLanguage || window.AtlasI18n?.state?.conversationLanguage || detectedConversationLanguage;
+      if (selectedLanguage) {
+        window.AtlasI18n?.setConversationLanguage(selectedLanguage);
       }
       addMessage("user", text);
       addHistory(text);
@@ -1303,10 +1444,11 @@ AI_CHAT_HTML = """
             user_id: userId,
             agent_type: urlIntent === "employees" ? "employer" : "candidate",
             message: text,
+            request_id: requestId,
             browser_language: navigator.language,
             saved_language: localStorage.getItem("atlas_language"),
-            ui_language: window.AtlasI18n?.state?.uiLanguage || localStorage.getItem("atlas_language"),
-            conversation_language: window.AtlasI18n?.state?.conversationLanguage || detectedConversationLanguage
+            ui_language: selectedLanguage,
+            conversation_language: conversationLanguage
           })
         });
         const data = await res.json();
@@ -1367,8 +1509,9 @@ AI_CHAT_HTML = """
     });
     window.AtlasI18n.init().then(() => {
       if (!chatBooted) bootChat();
+      if (window.location.hash === "") window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     });
   </script>
 </body>
 </html>
-""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{BRAND_LOGO_HTML}}", BRAND_LOGO_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("ai_chat"))
+""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{ATLAS_DESIGN_SYSTEM_CSS}}", ATLAS_DESIGN_SYSTEM_CSS).replace("{{BRAND_MARK_HTML}}", BRAND_MARK_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("ai_chat"))

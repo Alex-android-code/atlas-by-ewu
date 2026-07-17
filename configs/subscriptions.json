@@ -1,0 +1,61 @@
+{
+  "plans": {
+    "start": {
+      "label": "Start",
+      "features": {
+        "agent_creation": true,
+        "basic_professional_dna": true,
+        "basic_chat": true,
+        "limited_recommendations": true,
+        "basic_opportunity_search": true,
+        "extended_memory": false,
+        "document_control": false,
+        "career_strategy": false,
+        "company_analysis": false,
+        "negotiation_module": false,
+        "human_review": false,
+        "personal_support": false
+      }
+    },
+    "medium": {
+      "label": "Medium",
+      "features": {
+        "agent_creation": true,
+        "basic_professional_dna": true,
+        "basic_chat": true,
+        "limited_recommendations": true,
+        "basic_opportunity_search": true,
+        "extended_memory": true,
+        "document_control": true,
+        "career_strategy": true,
+        "cv_adaptation": true,
+        "interview_preparation": true,
+        "company_analysis": false,
+        "negotiation_module": false,
+        "human_review": false,
+        "personal_support": false
+      }
+    },
+    "pro": {
+      "label": "Pro",
+      "features": {
+        "agent_creation": true,
+        "basic_professional_dna": true,
+        "basic_chat": true,
+        "limited_recommendations": true,
+        "basic_opportunity_search": true,
+        "extended_memory": true,
+        "document_control": true,
+        "career_strategy": true,
+        "cv_adaptation": true,
+        "interview_preparation": true,
+        "company_analysis": true,
+        "negotiation_module": true,
+        "human_review": true,
+        "personal_support": true,
+        "priority_opportunities": true,
+        "advanced_analytics": true
+      }
+    }
+  }
+}

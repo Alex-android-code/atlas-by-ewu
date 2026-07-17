@@ -1,6 +1,7 @@
 ﻿"""Employer experience page."""
 
-from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_LOGO_HTML
+from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_MARK_HTML
+from api.components.design_system import ATLAS_DESIGN_SYSTEM_CSS
 from api.observability import observability_body_html, observability_head_html
 
 
@@ -38,6 +39,7 @@ EMPLOYER_HTML = f"""
       color: var(--atlas-white);
     }}
     {BRAND_LOGO_CSS}
+    {ATLAS_DESIGN_SYSTEM_CSS}
     header {{
       min-height: 76px;
       display: flex;
@@ -122,14 +124,96 @@ EMPLOYER_HTML = f"""
     }}
     @media (max-width: 760px) {{
       header {{ align-items: flex-start; flex-direction: column; }}
-      nav {{ width: 100%; flex-wrap: wrap; gap: 10px; }}
+      nav {{ width: 100%; flex-wrap: nowrap; gap: 6px; }}
+      main {{ padding: 10px; gap: 12px; }}
+      .intro {{ padding: 22px 16px 8px; }}
+      .intro h1 {{ font-size: 30px; }}
+      .intro p {{ font-size: 15px; }}
+      .messages {{ padding: 14px 16px; }}
+      .composer {{ padding: 12px; }}
+      .panel {{ padding: 10px; gap: 10px; }}
       .metrics {{ grid-template-columns: 1fr; }}
+    }}
+    header {{
+      min-height: 72px;
+    }}
+    main {{
+      max-width: 1440px;
+      margin: 0 auto;
+      grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+      gap: 16px;
+      padding: 16px;
+    }}
+    .conversation, .panel {{
+      min-height: calc(100vh - 104px);
+      border: 1px solid var(--atlas-line);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.035);
+      overflow: hidden;
+    }}
+    .panel {{
+      border-left: 1px solid var(--atlas-line);
+      padding: 14px;
+      background: rgba(255,255,255,0.028);
+    }}
+    .intro {{
+      padding: 28px clamp(18px, 4vw, 44px) 12px;
+    }}
+    .intro h1 {{
+      font-weight: 760;
+      letter-spacing: -0.014em;
+    }}
+    .intro p {{
+      color: var(--atlas-muted);
+    }}
+    .messages {{
+      padding: 18px clamp(18px, 4vw, 44px);
+    }}
+    .message {{
+      border-radius: 16px;
+      box-shadow: none;
+    }}
+    .assistant {{
+      background: rgba(255,255,255,0.055);
+      border: 1px solid var(--atlas-line);
+      border-left: 1px solid var(--atlas-line);
+    }}
+    .user {{
+      background: rgba(214,178,94,0.13);
+      border: 1px solid rgba(214,178,94,0.26);
+    }}
+    .composer {{
+      background: rgba(5,7,13,0.58);
+    }}
+    .inputbar {{
+      border-radius: 16px;
+      background: rgba(255,255,255,0.045);
+    }}
+    .card {{
+      border-radius: 16px;
+    }}
+    .advice-item, .metric {{
+      border-radius: 12px;
+      background: rgba(255,255,255,0.045);
+      border-color: var(--atlas-line);
+    }}
+    .score strong {{
+      color: var(--atlas-platinum);
+      font-weight: 760;
+    }}
+    @media (max-width: 1080px) {{
+      main {{
+        grid-template-columns: 1fr;
+      }}
+      .conversation, .panel {{
+        min-height: auto;
+      }}
     }}
   </style>
 </head>
 <body>
   <header>
-    {BRAND_LOGO_HTML}
+    {BRAND_MARK_HTML}
     <nav aria-label="Main navigation">
       <a href="/ai?intent=job" data-i18n="nav.jobs">Jobs</a>
       <a class="active" href="/employer" data-i18n="nav.employers">Employers</a>

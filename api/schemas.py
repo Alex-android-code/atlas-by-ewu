@@ -67,6 +67,7 @@ class AIChatRequest(BaseModel):
     user_id: str
     agent_type: str = "candidate"
     message: str
+    request_id: str | None = None
     browser_language: str | None = None
     saved_language: str | None = None
     ui_language: str | None = None
@@ -91,3 +92,14 @@ class AnalyticsEventCreate(BaseModel):
 
 class LoginRequest(BaseModel):
     password: str
+
+
+class AgentOnboardingAnswer(BaseModel):
+    user_id: str
+    field: str
+    value: Any
+    language: str = "uk"
+
+
+class AgentOnboardingComplete(BaseModel):
+    user_id: str

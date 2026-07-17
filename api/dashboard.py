@@ -1,6 +1,7 @@
 ﻿"""Coordinator dashboard HTML."""
 
-from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_LOGO_HTML
+from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_MARK_HTML
+from api.components.design_system import ATLAS_DESIGN_SYSTEM_CSS
 from api.observability import observability_body_html, observability_head_html
 
 
@@ -39,6 +40,7 @@ DASHBOARD_HTML = """
       color: var(--atlas-white);
     }
     {{BRAND_LOGO_CSS}}
+    {{ATLAS_DESIGN_SYSTEM_CSS}}
     header {
       padding: 18px 28px;
       background: rgba(11,19,43,0.92);
@@ -263,12 +265,110 @@ DASHBOARD_HTML = """
         overflow-x: auto;
       }
     }
+    header {
+      min-height: 72px;
+    }
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 22px;
+      gap: 16px;
+    }
+    .dashboard-intro {
+      border: 1px solid var(--atlas-line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+      box-shadow: var(--atlas-shadow-sm);
+    }
+    .dashboard-intro h1 {
+      font-weight: 760;
+      letter-spacing: -0.012em;
+    }
+    .toolbar, .actions {
+      gap: 8px;
+    }
+    h2 {
+      color: var(--atlas-platinum);
+      font-weight: 680;
+      padding: 14px 16px;
+    }
+    button {
+      min-height: 38px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.045);
+      border-color: var(--atlas-line-strong);
+      color: var(--atlas-platinum);
+      font-weight: 640;
+    }
+    button.mini {
+      min-height: 30px;
+      border-radius: 9px;
+    }
+    label {
+      color: var(--atlas-muted);
+    }
+    .grid, .dashboard-grid, .cards {
+      gap: 14px !important;
+    }
+    .card, .panel, .table-card, section {
+      border-radius: 16px !important;
+    }
+    table {
+      font-size: 13px;
+    }
+    tr {
+      border-color: var(--atlas-line) !important;
+    }
+    @media (max-width: 860px) {
+      header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px !important;
+      }
+      .top-nav {
+        width: 100%;
+        flex-wrap: nowrap;
+        gap: 6px;
+      }
+      header .toolbar {
+        width: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+      }
+      header .toolbar::-webkit-scrollbar {
+        display: none;
+      }
+      header .toolbar button {
+        flex: 0 0 auto;
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 12px;
+      }
+      main {
+        padding: 10px;
+        gap: 12px;
+      }
+      .dashboard-intro {
+        padding: 14px;
+      }
+      .dashboard-intro h1 {
+        font-size: 24px;
+      }
+      h2 {
+        padding: 12px 14px;
+        font-size: 15px;
+      }
+      input, select {
+        min-height: 42px;
+      }
+    }
   </style>
 </head>
 <body>
   <header>
     <div class="brand-title">
-      {{BRAND_LOGO_HTML}}
+      {{BRAND_MARK_HTML}}
     </div>
     <nav class="top-nav" aria-label="Main navigation">
       <a href="/ai?intent=job" data-i18n="nav.jobs">Jobs</a>
@@ -771,4 +871,4 @@ DASHBOARD_HTML = """
   </script>
 </body>
 </html>
-""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{BRAND_LOGO_HTML}}", BRAND_LOGO_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("dashboard"))
+""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{ATLAS_DESIGN_SYSTEM_CSS}}", ATLAS_DESIGN_SYSTEM_CSS).replace("{{BRAND_MARK_HTML}}", BRAND_MARK_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("dashboard"))

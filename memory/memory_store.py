@@ -5,6 +5,7 @@ adapter can later implement the same load/save interface.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Protocol
 
@@ -21,7 +22,7 @@ class MemoryStore(Protocol):
 
 class JsonMemoryStore:
     def __init__(self, storage_dir: Path | None = None) -> None:
-        self.storage_dir = storage_dir or Path(__file__).resolve().parents[1] / "data" / "memory"
+        self.storage_dir = storage_dir or _default_storage_dir()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     def load(self, user_id: str) -> UserMemory:
@@ -43,3 +44,9 @@ class JsonMemoryStore:
         safe_user_id = "".join(char for char in user_id if char.isalnum() or char in ("-", "_"))
         return self.storage_dir / f"{safe_user_id}.json"
 
+
+def _default_storage_dir() -> Path:
+    data_dir = os.getenv("ATLAS_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "memory"
+    return Path(__file__).resolve().parents[1] / "data" / "memory"

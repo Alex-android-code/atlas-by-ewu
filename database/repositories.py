@@ -3,7 +3,23 @@
 from dataclasses import fields
 from typing import Any, Generic, Protocol, TypeVar
 
-from core.models import ActivityEvent, Candidate, Document, Employer, Match, Vacancy
+from core.models import (
+    ActivityEvent,
+    AgentAction,
+    AgentMemoryRecord,
+    AgentRecommendation,
+    Candidate,
+    CareerGoal,
+    Document,
+    Employer,
+    Match,
+    Opportunity,
+    ProfessionalDNA,
+    Subscription,
+    User,
+    UserPreference,
+    Vacancy,
+)
 from database.json_database import JsonDatabase
 
 ModelT = TypeVar("ModelT")
@@ -66,6 +82,11 @@ class CandidateRepository(JsonRepository[Candidate]):
     model_class = Candidate
 
 
+class UserRepository(JsonRepository[User]):
+    collection = "users"
+    model_class = User
+
+
 class EmployerRepository(JsonRepository[Employer]):
     collection = "employers"
     model_class = Employer
@@ -89,3 +110,43 @@ class DocumentRepository(JsonRepository[Document]):
 class ActivityRepository(JsonRepository[ActivityEvent]):
     collection = "activity"
     model_class = ActivityEvent
+
+
+class ProfessionalDNARepository(JsonRepository[ProfessionalDNA]):
+    collection = "professional_profiles"
+    model_class = ProfessionalDNA
+
+
+class AgentMemoryRepository(JsonRepository[AgentMemoryRecord]):
+    collection = "agent_memories"
+    model_class = AgentMemoryRecord
+
+
+class AgentActionRepository(JsonRepository[AgentAction]):
+    collection = "agent_actions"
+    model_class = AgentAction
+
+
+class AgentRecommendationRepository(JsonRepository[AgentRecommendation]):
+    collection = "agent_recommendations"
+    model_class = AgentRecommendation
+
+
+class CareerGoalRepository(JsonRepository[CareerGoal]):
+    collection = "career_goals"
+    model_class = CareerGoal
+
+
+class OpportunityRepository(JsonRepository[Opportunity]):
+    collection = "opportunities"
+    model_class = Opportunity
+
+
+class UserPreferenceRepository(JsonRepository[UserPreference]):
+    collection = "user_preferences"
+    model_class = UserPreference
+
+
+class SubscriptionRepository(JsonRepository[Subscription]):
+    collection = "subscriptions"
+    model_class = Subscription

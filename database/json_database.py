@@ -5,13 +5,14 @@ objects instead of file paths. A PostgreSQL adapter can later replace this.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 
 class JsonDatabase:
     def __init__(self, storage_dir: Path | None = None) -> None:
-        self.storage_dir = storage_dir or Path(__file__).resolve().parents[1] / "data" / "db"
+        self.storage_dir = storage_dir or _default_storage_dir()
         self.storage_dir.mkdir(parents=True, exist_ok=True)
 
     def insert(self, collection: str, item_id: str, item: dict[str, Any]) -> dict[str, Any]:
@@ -46,3 +47,9 @@ class JsonDatabase:
         with path.open("w", encoding="utf-8") as file:
             json.dump(data, file, ensure_ascii=False, indent=2)
 
+
+def _default_storage_dir() -> Path:
+    data_dir = os.getenv("ATLAS_DATA_DIR")
+    if data_dir:
+        return Path(data_dir) / "db"
+    return Path(__file__).resolve().parents[1] / "data" / "db"

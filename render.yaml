@@ -7,9 +7,15 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/health
+    disk:
+      name: atlas-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
+      - key: ATLAS_DATA_DIR
+        value: /var/data
       - key: ATLAS_AI_PROVIDER
         value: gemini
       - key: GEMINI_MODEL
@@ -19,4 +25,6 @@ services:
       - key: GEMINI_MAX_RETRIES
         value: "3"
       - key: GEMINI_API_KEY
+        sync: false
+      - key: ATLAS_ADMIN_TOKEN
         sync: false

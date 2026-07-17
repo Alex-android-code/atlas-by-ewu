@@ -9,15 +9,18 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
+from api.agent import AGENT_DASHBOARD_HTML, AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
 from api.dashboard import DASHBOARD_HTML
-from api.dependencies import get_crm_service, get_operations_workflow
+from api.dependencies import get_agent_profile_service, get_crm_service, get_operations_workflow
 from api.employer import EMPLOYER_HTML
 from api.landing import LANDING_HTML
 from api.login import LOGIN_HTML
 from api.schemas import (
     AIChatRequest,
     AIMessageRequest,
+    AgentOnboardingAnswer,
+    AgentOnboardingComplete,
     AnalyticsEventCreate,
     CandidateCreate,
     EmployerCreate,
@@ -48,6 +51,7 @@ from services.language_policy import normalize_language_code
 from services.language_service import LanguageService
 from services.profile_builder import update_user_profile_from_message
 from services.analytics import record_event
+from services.dialogue_state import build_gemini_dialogue_context, process_candidate_dialogue
 from trust_engine import EmployerTrustEngine
 from vacancy_analysis import VacancyAnalyzer
 
@@ -104,6 +108,26 @@ def landing() -> str:
 @app.get("/ai", response_class=HTMLResponse)
 def ai_chat() -> str:
     return AI_CHAT_HTML
+
+
+@app.get("/agent/onboarding", response_class=HTMLResponse)
+def agent_onboarding() -> str:
+    return AGENT_ONBOARDING_HTML
+
+
+@app.get("/{language_code}/agent/onboarding", response_class=HTMLResponse)
+def localized_agent_onboarding(language_code: str) -> str:
+    return AGENT_ONBOARDING_HTML
+
+
+@app.get("/agent/dashboard", response_class=HTMLResponse)
+def agent_dashboard_page() -> str:
+    return AGENT_DASHBOARD_HTML
+
+
+@app.get("/{language_code}/agent/dashboard", response_class=HTMLResponse)
+def localized_agent_dashboard_page(language_code: str) -> str:
+    return AGENT_DASHBOARD_HTML
 
 
 @app.get("/health")
@@ -256,6 +280,41 @@ def get_translations(code: str) -> dict[str, str]:
     return language_service.load_translations(current_language)
 
 
+@app.get("/api/agent/onboarding/schema")
+def get_agent_onboarding_schema(language: str = "uk") -> dict:
+    return get_agent_profile_service().onboarding_schema(language=language)
+
+
+@app.post("/api/agent/onboarding/answer")
+def save_agent_onboarding_answer(payload: AgentOnboardingAnswer) -> dict:
+    try:
+        return get_agent_profile_service().save_onboarding_answer(
+            user_id=payload.user_id,
+            field=payload.field,
+            value=payload.value,
+            language=payload.language,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/agent/onboarding/complete")
+def complete_agent_onboarding(payload: AgentOnboardingComplete) -> dict:
+    return get_agent_profile_service().complete_onboarding(payload.user_id)
+
+
+@app.get("/api/agent/dashboard/{user_id}")
+def get_agent_dashboard(user_id: str) -> dict:
+    return get_agent_profile_service().agent_dashboard(user_id)
+
+
+@app.get("/api/subscriptions/features/{plan}")
+def get_subscription_features(plan: str) -> dict:
+    from services.agent_profile_service import load_subscription_features
+
+    return {"plan": plan, "features": load_subscription_features(plan)}
+
+
 @app.get("/api/i18n/bootstrap")
 def i18n_bootstrap(
     selected_language: str | None = None,
@@ -271,6 +330,7 @@ def i18n_bootstrap(
 def ai_chat_message(payload: AIChatRequest) -> dict:
     memory_store = get_operations_workflow().memory_store
     memory = memory_store.load(payload.user_id)
+    request_id = payload.request_id or new_id("CHATREQ")
     conversation_preference = (
         normalize_language_code(payload.conversation_language)
         or normalize_language_code(payload.ui_language)
@@ -283,12 +343,29 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
         saved_preference=conversation_preference,
         first_message=payload.message,
     )
+    cached_response = (memory.profile_data.get("request_cache") or {}).get(request_id)
+    if isinstance(cached_response, dict):
+        return {
+            "reply": cached_response.get("reply") or "",
+            "ai": {"fallback_used": True, "duplicate_request": True, "request_id": request_id},
+            "profile": memory.profile_data,
+            "employer_experience": memory.profile_data.get("employer_experience"),
+            "intent": memory.profile_data.get("detected_intent"),
+            "language": {
+                "ui_language": normalize_language_code(payload.ui_language) or normalize_language_code(payload.saved_language),
+                "conversation_language": language,
+            },
+            "request_id": request_id,
+            "duplicate": True,
+            "reply_validation": {"valid": True, "warnings": []},
+        }
     intent_result = IntentDetectorService().detect(
         payload.message,
         requested_agent_type=payload.agent_type,
         previous_intent=memory.profile_data.get("scenario") or memory.profile_data.get("intent"),
     )
     agent_type = intent_result.agent_type
+    dialogue_result = None
     if agent_type == "employer":
         profile = update_employer_profile_from_message(memory, payload.message, language=language)
         if intent_result.profession:
@@ -299,6 +376,13 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
         profile = update_user_profile_from_message(memory, payload.message, language=language)
         if intent_result.profession:
             profile["profession"] = profile.get("profession") or intent_result.profession
+        dialogue_result = process_candidate_dialogue(
+            profile=profile,
+            message=payload.message,
+            language=language,
+            request_id=request_id,
+        )
+        profile = dialogue_result.profile
         employer_experience = None
     profile["scenario"] = intent_result.scenario
     profile["tone_profile"] = tone_profile_for(intent_result.scenario)
@@ -324,10 +408,17 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
             "translations": translations,
             "employer_experience": employer_experience,
             "intent": profile["detected_intent"],
+            "dialogue": build_gemini_dialogue_context(
+                profile=profile,
+                language=language,
+                role=agent_type,
+                last_user_message=payload.message,
+                next_field=dialogue_result.next_field if dialogue_result else None,
+            ) if agent_type != "employer" else None,
         },
         message=payload.message,
     )
-    assistant_reply = _natural_reply(profile, ai_response, employer_experience, translations, language)
+    assistant_reply = dialogue_result.reply if dialogue_result else _natural_reply(profile, ai_response, employer_experience, translations, language)
     validation = validate_one_question_rule(assistant_reply, language=language)
     if not validation.valid and validation.safe_fallback:
         assistant_reply = validation.safe_fallback
@@ -343,6 +434,15 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
         "language": {
             "ui_language": normalize_language_code(payload.ui_language) or normalize_language_code(payload.saved_language),
             "conversation_language": language,
+        },
+        "request_id": request_id,
+        "duplicate": False,
+        "dialogue": {
+            "current_step": dialogue_result.current_step if dialogue_result else None,
+            "completed_fields": dialogue_result.completed_fields if dialogue_result else [],
+            "next_field": dialogue_result.next_field if dialogue_result else None,
+            "field": dialogue_result.field if dialogue_result else None,
+            "profile_updated": dialogue_result.profile_updated if dialogue_result else False,
         },
         "reply_validation": {
             "valid": validation.valid,
@@ -717,7 +817,9 @@ def _known_fields_for_reply(profile: dict, employer_experience: dict | None, sce
         "skills": profile.get("profession") or profile.get("skills"),
         "currentLocation": profile.get("country") or profile.get("city") or _last_message_mentions_current_location(profile),
         "experience": profile.get("experience_years"),
-        "documentsLegalStatus": profile.get("documents"),
+        "documentsLegalStatus": profile.get("documents")
+        or profile.get("documents_status")
+        or profile.get("residence_document_status"),
         "preferredContactMethod": profile.get("preferred_contact_method"),
         "phoneOrContact": profile.get("phone") or profile.get("phone_number") or profile.get("contact"),
         "drivingLicense": profile.get("driving_license"),

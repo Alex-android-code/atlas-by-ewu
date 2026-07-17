@@ -10,14 +10,14 @@
   {
     "code": "uk",
     "name": "Ukrainian",
-    "native_name": "Українська",
+    "native_name": "\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430",
     "flag": "UA",
     "enabled": true
   },
   {
     "code": "ru",
     "name": "Russian",
-    "native_name": "Русский",
+    "native_name": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
     "flag": "RU",
     "enabled": true
   },
@@ -38,14 +38,14 @@
   {
     "code": "es",
     "name": "Spanish",
-    "native_name": "Español",
+    "native_name": "Espa\u00f1ol",
     "flag": "ES",
     "enabled": true
   },
   {
     "code": "pt",
     "name": "Portuguese",
-    "native_name": "Português",
+    "native_name": "Portugu\u00eas",
     "flag": "PT",
     "enabled": true
   }

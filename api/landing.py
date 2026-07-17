@@ -1,6 +1,7 @@
 """Landing page HTML."""
 
 from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_LOGO_HTML
+from api.components.design_system import ATLAS_DESIGN_SYSTEM_CSS
 from api.observability import observability_body_html, observability_head_html
 
 
@@ -56,7 +57,8 @@ LANDING_HTML = f"""
       mask-image: linear-gradient(180deg, black, transparent 58%);
     }}
     {BRAND_LOGO_CSS}
-    .brand-logo-image {{ width: 267px; }}
+    {ATLAS_DESIGN_SYSTEM_CSS}
+    .brand-logo-image {{ width: auto; height: 147px; }}
     .shell {{ position: relative; z-index: 1; }}
     header {{
       position: sticky;
@@ -93,6 +95,7 @@ LANDING_HTML = f"""
       background: rgba(212,175,55,0.08);
     }}
     .language-selector {{ position: relative; }}
+    .mobile-language-selector {{ display: none; }}
     .language-button {{
       display: inline-flex;
       align-items: center;
@@ -939,8 +942,9 @@ LANDING_HTML = f"""
         gap: 0;
       }}
       .brand-logo-image {{
-        width: min(266px, calc(100vw - 98px));
-        max-height: 112px;
+        width: auto;
+        height: min(148px, calc(100vw - 98px));
+        max-height: 148px;
         object-fit: contain;
       }}
       .menu-toggle {{ display: grid; }}
@@ -1037,7 +1041,7 @@ LANDING_HTML = f"""
       section {{ padding-left: 24px; padding-right: 24px; }}
       header {{ gap: 8px; padding-left: 14px; padding-right: 14px; }}
       .brand-logo {{ max-width: calc(100vw - 76px); }}
-      .brand-logo-image {{ width: min(220px, calc(100vw - 100px)); }}
+      .brand-logo-image {{ width: auto; height: min(120px, calc(100vw - 100px)); }}
       .brand-logo-caption {{ max-width: calc(100vw - 100px); font-size: 7px; }}
       h1 {{ font-size: clamp(39px, 13.2vw, 52px); }}
       .hero-copy p {{ font-size: 17px; }}
@@ -1052,15 +1056,430 @@ LANDING_HTML = f"""
         transition-duration: 0.01ms !important;
       }}
     }}
+    .premium-stage-note {{
+      color: var(--atlas-muted);
+    }}
+    body {{
+      background:
+        radial-gradient(circle at 18% -8%, rgba(214,178,94,0.13), transparent 30%),
+        radial-gradient(circle at 76% 8%, rgba(238,241,246,0.055), transparent 24%),
+        linear-gradient(180deg, #05070d 0%, #090d18 52%, #0b1324 100%);
+    }}
+    body::before {{
+      background-image:
+        linear-gradient(rgba(238,241,246,0.024) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(238,241,246,0.02) 1px, transparent 1px);
+      opacity: 0.34;
+      mask-image: linear-gradient(180deg, black, transparent 54%);
+    }}
+    header {{
+      min-height: 92px;
+      padding-block: 8px;
+    }}
+    nav {{
+      font-weight: 580;
+    }}
+    section {{
+      max-width: var(--atlas-page-max);
+      margin-inline: auto;
+    }}
+    .hero {{
+      min-height: calc(100vh - 92px);
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.72fr);
+      gap: clamp(30px, 6vw, 88px);
+    }}
+    .hero::before {{
+      opacity: 0.42;
+      filter: blur(18px);
+    }}
+    .hero::after {{
+      opacity: 0.18;
+    }}
+    .eyebrow {{
+      min-height: 30px;
+      border-color: var(--atlas-line-strong);
+      color: var(--atlas-muted);
+      background: rgba(255,255,255,0.05);
+      font-weight: 720;
+      letter-spacing: 0.12em;
+    }}
+    h1 {{
+      max-width: 780px;
+      font-size: clamp(52px, 7.5vw, 104px);
+      font-weight: 780;
+      letter-spacing: -0.015em;
+    }}
+    .hero-copy p {{
+      color: rgba(238,241,246,0.76);
+      font-size: clamp(18px, 2vw, 24px);
+    }}
+    .hero-actions {{
+      gap: 12px;
+    }}
+    .button {{
+      min-height: 54px;
+      border-radius: 14px;
+      font-weight: 720;
+    }}
+    .brand-stage, .analysis-panel, .profile-preview-card, .map-card, .trust-card, .step-card {{
+      border-radius: 18px !important;
+    }}
+    .brand-stage::before {{
+      opacity: 0.28;
+      filter: blur(24px);
+    }}
+    .brand-logo-caption, .hero-brand-caption {{
+      color: rgba(238,241,246,0.56);
+      text-shadow: none;
+    }}
+    .analysis-step, .profile-status, .atlas-for-you {{
+      background: rgba(255,255,255,0.045) !important;
+      border-color: var(--atlas-line) !important;
+    }}
+    .steps-grid, .trust-grid, .ai-capabilities {{
+      gap: 14px;
+    }}
+    @media (max-width: 980px) {{
+      .hero {{
+        grid-template-columns: 1fr;
+        min-height: auto;
+      }}
+    }}
+    @media (max-width: 760px) {{
+      header {{
+        min-height: 92px !important;
+        align-content: center;
+        display: grid;
+        grid-template-columns: auto 44px;
+        padding: calc(8px + env(safe-area-inset-top)) 14px 10px !important;
+      }}
+      .brand-logo {{
+        justify-items: start;
+        max-width: calc(100vw - 78px);
+      }}
+      .brand-logo-image {{
+        width: auto;
+        height: min(86px, calc(100vw - 92px));
+        max-height: 86px;
+      }}
+      .brand-logo-caption {{
+        display: none;
+      }}
+      .menu-toggle {{
+        display: grid;
+        grid-column: 2;
+        grid-row: 1;
+        align-self: center;
+      }}
+      nav {{
+        grid-column: 1 / -1;
+        width: 100%;
+        display: none !important;
+        padding-top: 8px;
+      }}
+      nav.open {{
+        display: flex !important;
+      }}
+      .hero {{
+        padding: 30px 22px 36px;
+        gap: 18px;
+      }}
+      h1 {{
+        max-width: 330px;
+        font-size: clamp(42px, 13vw, 56px);
+        line-height: 0.95;
+      }}
+      .hero-copy {{
+        gap: 16px;
+      }}
+      .hero-copy p {{
+        max-width: 330px;
+        font-size: 17px;
+        line-height: 1.42;
+      }}
+      .hero-actions {{
+        grid-template-columns: 1fr;
+      }}
+      .button {{
+        width: 100%;
+        min-height: 56px;
+      }}
+      .analysis-panel, .profile-preview-card {{
+        padding: 14px;
+      }}
+    }}
+    .support-grid {{
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      align-items: stretch;
+    }}
+    .support-card {{
+      min-width: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      border-radius: 18px !important;
+      padding: clamp(18px, 2vw, 22px);
+      overflow-wrap: break-word;
+      word-break: normal;
+      hyphens: none;
+    }}
+    .support-card h3 {{
+      margin: 0;
+      max-width: 100%;
+      color: var(--atlas-white) !important;
+      font-size: clamp(18px, 1.4vw, 22px);
+      line-height: 1.18;
+      letter-spacing: -0.01em;
+      overflow-wrap: break-word;
+    }}
+    .support-card p {{
+      margin: 0;
+      max-width: 62ch;
+      color: rgba(238,241,246,0.72) !important;
+      font-size: clamp(15px, 1vw, 16px);
+      line-height: 1.55;
+    }}
+    .support-icon {{
+      width: 44px !important;
+      height: 44px !important;
+      margin: 0 !important;
+      border-radius: 14px !important;
+      background: rgba(214,178,94,0.10) !important;
+      border: 1px solid rgba(214,178,94,0.26);
+      color: var(--atlas-gold-soft) !important;
+      box-shadow: none !important;
+    }}
+    .support-icon svg {{
+      width: 23px;
+      height: 23px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }}
+    .support-details {{
+      margin-top: auto;
+      min-width: 0;
+    }}
+    .support-details summary {{
+      width: fit-content;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(238,241,246,0.16);
+      border-radius: 999px;
+      padding: 0 14px;
+      color: var(--atlas-gold-soft);
+      background: rgba(255,255,255,0.045);
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 680;
+      list-style: none;
+      transition: transform 140ms ease, background 160ms ease, border-color 160ms ease;
+    }}
+    .support-details summary::-webkit-details-marker {{
+      display: none;
+    }}
+    .support-details summary::after {{
+      content: "+";
+      color: rgba(238,241,246,0.62);
+      font-weight: 740;
+    }}
+    .support-details[open] summary::after {{
+      content: "−";
+    }}
+    .support-details summary:hover,
+    .support-details summary:focus-visible {{
+      border-color: rgba(214,178,94,0.42);
+      background: rgba(214,178,94,0.09);
+      transform: translateY(-1px);
+    }}
+    .support-details summary:active {{
+      transform: translateY(0);
+    }}
+    .support-details ul {{
+      margin-top: 12px !important;
+    }}
+    .support-details li {{
+      min-width: 0;
+      overflow-wrap: break-word;
+      line-height: 1.5 !important;
+    }}
+    @media (min-width: 768px) and (max-width: 1199px) {{
+      .support-grid {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }}
+    }}
+    @media (min-width: 768px) and (max-width: 900px) {{
+      .premium-skin header {{
+        min-height: 78px !important;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto 38px;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: calc(8px + env(safe-area-inset-top)) 16px 8px !important;
+      }}
+      .premium-skin .brand-logo {{
+        justify-items: start;
+        max-width: 100%;
+        min-width: 0;
+      }}
+      .premium-skin .brand-logo-image {{
+        width: auto;
+        height: 64px;
+        max-height: 64px;
+        object-fit: contain;
+      }}
+      .premium-skin .brand-logo-caption {{
+        display: none;
+      }}
+      .premium-skin .menu-toggle {{
+        display: grid;
+        grid-column: 3;
+        width: 38px;
+        height: 38px;
+        border: 1px solid rgba(238,241,246,0.15);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.055);
+        color: var(--atlas-platinum);
+        font-size: 19px;
+        place-items: center;
+      }}
+      .premium-skin .mobile-language-selector {{
+        display: block;
+        grid-column: 2;
+        position: relative;
+      }}
+      .premium-skin .mobile-language-selector .language-button {{
+        min-height: 38px;
+        border: 1px solid rgba(238,241,246,0.15);
+        border-radius: 12px;
+        padding: 0 10px;
+        background: rgba(255,255,255,0.055);
+        color: var(--atlas-platinum);
+      }}
+      .premium-skin .mobile-language-selector .language-menu {{
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+      }}
+      .premium-skin nav {{
+        grid-column: 1 / -1;
+        width: 100%;
+        display: none !important;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        padding-top: 8px;
+        scrollbar-width: none;
+      }}
+      .premium-skin nav::-webkit-scrollbar {{
+        display: none;
+      }}
+      .premium-skin nav.open {{
+        display: flex !important;
+      }}
+    }}
+    @media (max-width: 767px) {{
+      .premium-skin header {{
+        min-height: 78px !important;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto 38px;
+        align-items: center !important;
+        gap: 10px !important;
+        padding: calc(8px + env(safe-area-inset-top)) 16px 8px !important;
+      }}
+      .premium-skin .brand-logo {{
+        max-width: 100%;
+        justify-items: start;
+      }}
+      .premium-skin .brand-logo-image {{
+        width: auto;
+        height: 64px;
+        max-height: 64px;
+      }}
+      .premium-skin .menu-toggle {{
+        display: grid;
+        grid-column: 3;
+        width: 38px;
+        height: 38px;
+        border: 1px solid rgba(238,241,246,0.15);
+        border-radius: 12px;
+        background: rgba(255,255,255,0.055);
+        color: var(--atlas-platinum);
+        font-size: 19px;
+      }}
+      .premium-skin .mobile-language-selector {{
+        display: block;
+        grid-column: 2;
+        position: relative;
+      }}
+      .premium-skin .mobile-language-selector .language-button {{
+        min-height: 38px;
+        border: 1px solid rgba(238,241,246,0.15);
+        border-radius: 12px;
+        padding: 0 10px;
+        background: rgba(255,255,255,0.055);
+        color: var(--atlas-platinum);
+      }}
+      .premium-skin .mobile-language-selector .language-menu {{
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        width: min(220px, calc(100vw - 32px));
+      }}
+      .premium-skin nav {{
+        grid-column: 1 / -1;
+      }}
+      .light-section#support {{
+        padding-left: 16px;
+        padding-right: 16px;
+      }}
+      .support-grid {{
+        grid-template-columns: minmax(0, 1fr) !important;
+        gap: 18px;
+        width: 100%;
+      }}
+      .support-card {{
+        width: 100%;
+        min-width: 0;
+        padding: 18px;
+        border-radius: 18px !important;
+        gap: 12px;
+      }}
+      .support-card h3 {{
+        font-size: clamp(20px, 6vw, 24px);
+        line-height: 1.2;
+      }}
+      .support-card p {{
+        max-width: 100%;
+        font-size: clamp(15px, 4.1vw, 17px);
+        line-height: 1.58;
+      }}
+      .support-icon {{
+        width: 42px !important;
+        height: 42px !important;
+      }}
+    }}
   </style>
 </head>
 <body class="premium-skin">
   <div class="shell">
     <header>
       {BRAND_LOGO_HTML}
+      <div class="language-selector mobile-language-selector" data-language-selector>
+        <button class="language-button" type="button" aria-expanded="false" data-language-button>
+          <span data-i18n="nav.languages">Мови</span>
+          <span class="language-current" data-language-current>UK</span>
+        </button>
+        <div class="language-menu" role="menu" data-language-menu></div>
+      </div>
       <button class="menu-toggle" type="button" aria-label="Menu" aria-expanded="false" id="menu-toggle">☰</button>
       <nav aria-label="Main navigation" id="main-nav">
-        <a class="nav-primary" href="/ai?intent=job" data-i18n="landing.cta_create">Створити профіль</a>
+        <a class="nav-primary" href="/agent/onboarding" data-i18n="landing.cta_create">Створити свого AI-агента</a>
         <a href="#how" data-i18n="landing.nav_how">Як працює</a>
         <a href="#map" data-i18n="landing.nav_europe">Європа</a>
         <a class="secondary" href="#support" data-i18n="landing.nav_support">Супровід</a>
@@ -1080,11 +1499,11 @@ LANDING_HTML = f"""
       <section class="hero">
         <div class="hero-copy fade-up">
           <div class="eyebrow" data-i18n="landing.eyebrow">ATLAS Premium Workforce OS</div>
-          <h1 data-i18n="landing.hero_title">AI Workforce Platform</h1>
-          <p data-i18n="landing.hero_subtitle">Один профіль. Вся кар'єра. Уся Європа.</p>
+          <h1 data-i18n="landing.hero_title">Ваш персональний AI-агент для кар'єри</h1>
+          <p data-i18n="landing.hero_subtitle">ATLAS працює у ваших інтересах, запам'ятовує професійну історію та формує вашу Professional DNA.</p>
           <div class="hero-actions">
-            <a class="button primary" href="/ai?intent=job" data-analytics-event="create_profile_click" data-i18n="landing.cta_create">Створити профіль</a>
-            <a class="button" href="/ai?demo=atlas" data-analytics-event="demo_click"><span class="play-icon" aria-hidden="true">▶</span><span data-i18n="landing.cta_demo">Переглянути демо</span></a>
+            <a class="button primary" href="/agent/onboarding" data-analytics-event="create_ai_agent_click" data-i18n="landing.cta_create">Створити свого AI-агента</a>
+            <a class="button" href="/agent/dashboard" data-analytics-event="existing_agent_click"><span class="play-icon" aria-hidden="true">▶</span><span data-i18n="landing.cta_demo">У мене вже є агент</span></a>
           </div>
         </div>
         <div class="hero-visual fade-up">
@@ -1217,44 +1636,64 @@ LANDING_HTML = f"""
         </div>
         <div class="support-grid">
           <article class="support-card fade-up">
-            <div class="support-icon">LG</div>
+            <div class="support-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><path d="M14 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M14 2v5h5"/></svg>
+            </div>
             <h3 data-i18n="landing.support_legal_title">Легалізація</h3>
             <p data-i18n="landing.support_legal_text">Координатор фіксує країну, статус документів і передає складні випадки на ручну перевірку.</p>
-            <ul>
+            <details class="support-details">
+              <summary data-i18n="landing.details_more">Докладніше</summary>
+              <ul>
               <li data-i18n="landing.support_legal_item_1">Аналіз наявних документів</li>
               <li data-i18n="landing.support_legal_item_2">Підказки щодо наступного кроку</li>
               <li data-i18n="landing.support_legal_item_3">Без фінальних юридичних рішень від AI</li>
-            </ul>
+              </ul>
+            </details>
           </article>
           <article class="support-card fade-up">
-            <div class="support-icon">CR</div>
+            <div class="support-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M22 10L12 5 2 10l10 5 10-5z"/><path d="M6 12v5c3 2 9 2 12 0v-5"/><path d="M22 10v6"/></svg>
+            </div>
             <h3 data-i18n="landing.support_courses_title">Курси</h3>
             <p data-i18n="landing.support_courses_text">ATLAS бачить прогалини в профілі та може рекомендувати навчання або сертифікацію перед підбором.</p>
-            <ul>
+            <details class="support-details">
+              <summary data-i18n="landing.details_more">Докладніше</summary>
+              <ul>
               <li data-i18n="landing.support_courses_item_1">Мовні та професійні курси</li>
               <li data-i18n="landing.support_courses_item_2">Підготовка до вакансій з вимогами</li>
               <li data-i18n="landing.support_courses_item_3">Підвищення довіри до профілю</li>
-            </ul>
+              </ul>
+            </details>
           </article>
           <article class="support-card fade-up">
-            <div class="support-icon">HM</div>
+            <div class="support-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+            </div>
             <h3 data-i18n="landing.support_housing_title">Допомога з житлом</h3>
             <p data-i18n="landing.support_housing_text">Платформа відмічає потребу в житлі та показує роботодавцю, чи потрібні умови проживання для кандидата.</p>
-            <ul>
+            <details class="support-details">
+              <summary data-i18n="landing.details_more">Докладніше</summary>
+              <ul>
               <li data-i18n="landing.support_housing_item_1">Потреба в житлі в профілі</li>
               <li data-i18n="landing.support_housing_item_2">Умови житла у вакансії</li>
               <li data-i18n="landing.support_housing_item_3">Контроль координатора перед стартом</li>
-            </ul>
+              </ul>
+            </details>
           </article>
           <article class="support-card fade-up">
-            <div class="support-icon">IN</div>
+            <div class="support-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+            </div>
             <h3 data-i18n="landing.support_insurance_title">Страхування</h3>
             <p data-i18n="landing.support_insurance_text">ATLAS може фіксувати потребу в страховому супроводі та передавати її координатору перед виїздом або стартом.</p>
-            <ul>
+            <details class="support-details">
+              <summary data-i18n="landing.details_more">Докладніше</summary>
+              <ul>
               <li data-i18n="landing.support_insurance_item_1">Потреба в медичному покритті</li>
               <li data-i18n="landing.support_insurance_item_2">Страхування для країни роботи</li>
               <li data-i18n="landing.support_insurance_item_3">Контроль готовності до виїзду</li>
-            </ul>
+              </ul>
+            </details>
           </article>
         </div>
       </section>

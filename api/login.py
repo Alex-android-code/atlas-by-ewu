@@ -1,6 +1,7 @@
 ﻿"""Coordinator login page HTML."""
 
-from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_LOGO_HTML
+from api.components.brand_logo import BRAND_LOGO_CSS, BRAND_MARK_HTML
+from api.components.design_system import ATLAS_DESIGN_SYSTEM_CSS
 from api.observability import observability_body_html, observability_head_html
 
 
@@ -38,6 +39,7 @@ LOGIN_HTML = """
       padding: 20px;
     }
     {{BRAND_LOGO_CSS}}
+    {{ATLAS_DESIGN_SYSTEM_CSS}}
     .box {
       width: min(400px, 100%);
       background: rgba(26,35,56,0.88);
@@ -76,11 +78,44 @@ LOGIN_HTML = """
       cursor: pointer;
     }
     .status { color: #fca5a5; min-height: 20px; }
+    .box {
+      width: min(440px, 100%);
+      border-radius: 18px;
+      padding: 30px;
+      box-shadow: var(--atlas-shadow-md);
+    }
+    h1 {
+      font-weight: 760;
+      letter-spacing: -0.012em;
+    }
+    p {
+      color: var(--atlas-muted);
+    }
+    input, button {
+      min-height: 52px;
+      border-radius: 14px;
+    }
+    .status {
+      color: #fda4af;
+      font-size: 14px;
+    }
+    @media (max-width: 520px) {
+      body {
+        align-content: start;
+        padding: calc(24px + env(safe-area-inset-top)) 14px calc(18px + env(safe-area-inset-bottom));
+      }
+      .box {
+        padding: 22px;
+      }
+      h1 {
+        font-size: 24px;
+      }
+    }
   </style>
 </head>
 <body>
   <form class="box" id="login-form">
-    {{BRAND_LOGO_HTML}}
+    {{BRAND_MARK_HTML}}
     <h1 data-i18n="nav.login">Login</h1>
     <p data-i18n="login.subtitle">Secure access for the ATLAS operations team.</p>
     <input name="password" type="password" data-i18n-placeholder="login.access_code" placeholder="Access code" autocomplete="current-password" />
@@ -109,4 +144,4 @@ LOGIN_HTML = """
   </script>
 </body>
 </html>
-""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{BRAND_LOGO_HTML}}", BRAND_LOGO_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("login"))
+""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{ATLAS_DESIGN_SYSTEM_CSS}}", ATLAS_DESIGN_SYSTEM_CSS).replace("{{BRAND_MARK_HTML}}", BRAND_MARK_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("login"))
