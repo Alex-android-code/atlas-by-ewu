@@ -872,3 +872,785 @@ DASHBOARD_HTML = """
 </body>
 </html>
 """.replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{ATLAS_DESIGN_SYSTEM_CSS}}", ATLAS_DESIGN_SYSTEM_CSS).replace("{{BRAND_MARK_HTML}}", BRAND_MARK_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("dashboard"))
+
+
+DASHBOARD_HTML = """
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ATLAS CRM</title>
+  <link rel="icon" href="/static/assets/atlas_brand_icon.png" type="image/png" />
+  {{OBSERVABILITY_HEAD}}
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050914;
+      --panel: rgba(255,255,255,0.055);
+      --panel-strong: rgba(255,255,255,0.085);
+      --line: rgba(238,241,246,0.13);
+      --text: #eef1f6;
+      --muted: rgba(238,241,246,0.66);
+      --gold: #d4af37;
+      --gold-soft: #f5d98a;
+      --ok: #20c787;
+      --warn: #f5c542;
+      --bad: #ef6461;
+    }
+    * { box-sizing: border-box; min-width: 0; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 18% 0%, rgba(212,175,55,0.13), transparent 30%),
+        radial-gradient(circle at 82% 8%, rgba(90,160,255,0.11), transparent 28%),
+        var(--bg);
+    }
+    {{BRAND_LOGO_CSS}}
+    {{ATLAS_DESIGN_SYSTEM_CSS}}
+    button, input, select {
+      font: inherit;
+    }
+    button, .button {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 0 14px;
+      color: var(--text);
+      background: rgba(255,255,255,0.055);
+      cursor: pointer;
+      font-weight: 680;
+      text-decoration: none;
+      display: inline-grid;
+      place-items: center;
+    }
+    button:hover, .button:hover { border-color: rgba(212,175,55,0.42); }
+    .primary {
+      color: #130f05;
+      border-color: transparent;
+      background: linear-gradient(135deg, #ffe27a, var(--gold) 52%, #a97818);
+    }
+    .danger { color: #ffd8d8; border-color: rgba(239,100,97,0.38); }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      min-height: 76px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px clamp(16px, 4vw, 34px);
+      border-bottom: 1px solid var(--line);
+      background: rgba(5,9,20,0.86);
+      backdrop-filter: blur(18px);
+    }
+    .brand-area {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-copy strong {
+      display: block;
+      font-size: 15px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .brand-copy span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    main {
+      width: min(1440px, 100%);
+      margin: 0 auto;
+      padding: 22px clamp(14px, 3vw, 30px) 34px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 52px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+    .lead {
+      max-width: 720px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric, .panel, .task, details {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: linear-gradient(180deg, var(--panel-strong), var(--panel));
+      box-shadow: 0 24px 70px rgba(0,0,0,0.24);
+    }
+    .metric {
+      padding: 14px;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      color: var(--gold-soft);
+      font-size: clamp(25px, 4vw, 38px);
+      line-height: 1;
+    }
+    .workspace {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 16px;
+      align-items: start;
+    }
+    .panel {
+      overflow: hidden;
+    }
+    .panel-head {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    h2 {
+      margin: 0;
+      font-size: 17px;
+      letter-spacing: 0;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .tasks {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+    }
+    .task {
+      padding: 14px;
+      box-shadow: none;
+      background: rgba(255,255,255,0.045);
+    }
+    .task-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .task h3 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.25;
+    }
+    .task p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .task-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      border-radius: 999px;
+      padding: 0 9px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .pill.ok { color: #b7f7dc; border-color: rgba(32,199,135,0.28); }
+    .pill.warn { color: #ffe7a4; border-color: rgba(245,197,66,0.32); }
+    .pill.bad { color: #ffd4d4; border-color: rgba(239,100,97,0.32); }
+    .columns {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+    .list {
+      display: grid;
+      gap: 8px;
+      padding: 14px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 52px;
+      padding: 10px 12px;
+      border: 1px solid rgba(238,241,246,0.09);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.035);
+    }
+    .row strong {
+      display: block;
+      font-size: 14px;
+    }
+    .row span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+    details {
+      margin-top: 16px;
+      overflow: hidden;
+    }
+    summary {
+      min-height: 58px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      cursor: pointer;
+      font-weight: 760;
+    }
+    .forms {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      padding: 0 14px 14px;
+    }
+    form {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid rgba(238,241,246,0.09);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.035);
+    }
+    label {
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    input, select {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid rgba(238,241,246,0.13);
+      border-radius: 12px;
+      padding: 0 11px;
+      color: var(--text);
+      background: rgba(0,0,0,0.22);
+      outline: none;
+    }
+    input:focus, select:focus {
+      border-color: rgba(212,175,55,0.62);
+      box-shadow: 0 0 0 4px rgba(212,175,55,0.10);
+    }
+    .status-line {
+      min-height: 42px;
+      display: flex;
+      align-items: center;
+      margin-top: 16px;
+      padding: 0 14px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.04);
+      font-size: 13px;
+    }
+    .empty {
+      padding: 16px;
+      color: var(--muted);
+      text-align: center;
+    }
+    @media (max-width: 1100px) {
+      .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .workspace, .columns, .forms { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+      header { align-items: flex-start; flex-direction: column; }
+      .top-actions { width: 100%; justify-content: stretch; }
+      .top-actions > * { flex: 1 1 auto; }
+      main { padding: 14px 12px 28px; }
+      .hero { grid-template-columns: 1fr; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metric { padding: 12px; }
+      .task-top, .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand-area">
+      {{BRAND_MARK_HTML}}
+      <div class="brand-copy">
+        <strong>ATLAS CRM</strong>
+        <span>Рабочий центр координатора</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <a class="button" href="/">Сайт</a>
+      <a class="button" href="/agent/dashboard">AI-агент</a>
+      <button onclick="loadAll()">Обновить</button>
+      <button class="primary" onclick="seedDemo()">Demo</button>
+    </div>
+  </header>
+  <main>
+    <section class="hero">
+      <div>
+        <h1>CRM без шума</h1>
+        <p class="lead">Здесь видно только то, что нужно координатору сегодня: кого проверить, какую вакансию опубликовать, где есть риск и что делать дальше.</p>
+      </div>
+      <span class="pill ok" id="health-pill">Система готова</span>
+    </section>
+
+    <section class="metrics" aria-label="CRM metrics">
+      <div class="metric"><span>Кандидаты</span><strong id="m-candidates">0</strong></div>
+      <div class="metric"><span>Работодатели</span><strong id="m-employers">0</strong></div>
+      <div class="metric"><span>Вакансии</span><strong id="m-vacancies">0</strong></div>
+      <div class="metric"><span>Совпадения</span><strong id="m-matches">0</strong></div>
+      <div class="metric"><span>Риски</span><strong id="m-risks">0</strong></div>
+      <div class="metric"><span>Контакт</span><strong id="m-contact">0</strong></div>
+    </section>
+
+    <section class="workspace">
+      <div>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Требует внимания</h2>
+              <div class="hint">Самые важные действия сверху</div>
+            </div>
+            <span class="pill warn" id="attention-count">0 задач</span>
+          </div>
+          <div class="tasks" id="attention-list"></div>
+        </section>
+
+        <section class="columns">
+          <div class="panel">
+            <div class="panel-head"><h2>Работодатели</h2><span class="hint">Новые и непроверенные</span></div>
+            <div class="list" id="employer-list"></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Вакансии</h2><span class="hint">Открытые и опубликованные</span></div>
+            <div class="list" id="vacancy-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Следующий шаг</h2>
+              <div class="hint">Одна понятная команда вместо таблиц</div>
+            </div>
+          </div>
+          <div class="tasks">
+            <div class="task">
+              <div class="task-top">
+                <div>
+                  <h3 id="next-title">Загрузка...</h3>
+                  <p id="next-text">ATLAS анализирует текущую очередь.</p>
+                </div>
+                <span class="pill ok">AI-подсказка</span>
+              </div>
+              <div class="task-actions" id="next-actions"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" style="margin-top:16px">
+          <div class="panel-head"><h2>Последние события</h2><span class="hint">Журнал без перегруза</span></div>
+          <div class="list" id="event-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <details>
+      <summary>Добавить данные вручную <span class="hint">кандидат, работодатель, вакансия</span></summary>
+      <div class="forms">
+        <form id="candidate-form">
+          <strong>Кандидат</strong>
+          <label>Имя<input name="first_name" value="Andrii" required /></label>
+          <label>Фамилия<input name="last_name" value="Melnyk" required /></label>
+          <label>Email<input name="email" value="andrii.melnyk@example.com" required /></label>
+          <label>Телефон<input name="phone" value="+380661234567" required /></label>
+          <label>Страна<input name="country_code" value="UA" required /></label>
+          <label>Профессия<input name="profession_code" value="welder" required /></label>
+          <label>Опыт, лет<input name="years_of_experience" type="number" value="4" min="0" /></label>
+          <label>Языки<input name="languages" value="uk,pl" /></label>
+          <button class="primary" type="submit">Создать кандидата</button>
+        </form>
+
+        <form id="employer-form">
+          <strong>Работодатель</strong>
+          <label>Компания<input name="company_name" value="Atlas Demo Works" required /></label>
+          <label>Страна<input name="country_code" value="PL" required /></label>
+          <label>Email<input name="contact_email" value="hr@atlas-demo.example" required /></label>
+          <label>Телефон<input name="contact_phone" value="+48111222333" required /></label>
+          <label>Отрасль<input name="industry" value="manufacturing" required /></label>
+          <label>Проверен<select name="verified"><option value="false">Нет</option><option value="true">Да</option></select></label>
+          <button class="primary" type="submit">Создать работодателя</button>
+        </form>
+
+        <form id="vacancy-form">
+          <strong>Вакансия</strong>
+          <label>Работодатель<select name="employer_id" id="vacancy-employer"></select></label>
+          <label>Название<input name="title" value="Welder" required /></label>
+          <label>Страна<input name="country_code" value="PL" required /></label>
+          <label>Профессия<input name="profession_code" value="welder" required /></label>
+          <label>Зарплата от<input name="salary_min" type="number" value="5600" min="0" /></label>
+          <label>Зарплата до<input name="salary_max" type="number" value="7200" min="0" /></label>
+          <label>Валюта<input name="currency" value="PLN" /></label>
+          <label>Город<input name="location" value="Poznan" /></label>
+          <label>Языки<input name="required_languages" value="pl" /></label>
+          <label>Документы<input name="required_documents" value="passport_or_id,cv" /></label>
+          <button class="primary" type="submit">Создать вакансию</button>
+        </form>
+      </div>
+    </details>
+
+    <section class="status-line" id="status-line">Готово.</section>
+  </main>
+  {{OBSERVABILITY_BODY}}
+  <script>
+    let state = { dashboard: null, employers: [], vacancies: [] };
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[char]));
+    }
+    function splitList(value) {
+      return String(value || "").split(/[,\\n]+/).map(item => item.trim()).filter(Boolean);
+    }
+    function setStatus(message) {
+      $("status-line").textContent = message;
+    }
+    async function sendJson(method, url, payload) {
+      const response = await fetch(url, {
+        method,
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload || {})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Request failed");
+      return data;
+    }
+    const postJson = (url, payload) => sendJson("POST", url, payload);
+    const patchJson = (url, payload) => sendJson("PATCH", url, payload);
+
+    async function loadAll() {
+      setStatus("Обновляю CRM...");
+      const [dashboardRes, employersRes, vacanciesRes] = await Promise.all([
+        fetch("/api/dashboard"),
+        fetch("/api/employers"),
+        fetch("/api/vacancies")
+      ]);
+      state.dashboard = await dashboardRes.json();
+      state.employers = await employersRes.json();
+      state.vacancies = await vacanciesRes.json();
+      render();
+      setStatus("CRM обновлена.");
+    }
+
+    function render() {
+      const data = state.dashboard;
+      $("m-candidates").textContent = data.new_candidates.length;
+      $("m-employers").textContent = data.new_employers.length;
+      $("m-vacancies").textContent = data.open_vacancies.length;
+      $("m-matches").textContent = data.strong_matches.length;
+      $("m-risks").textContent = data.risky_cases.length;
+      $("m-contact").textContent = data.manual_contact.length;
+      renderAttention(data);
+      renderEmployers(data.new_employers);
+      renderVacancies(data.open_vacancies);
+      renderEvents(data.event_feed || data.activity || []);
+      renderNextStep(data);
+      renderSelects();
+    }
+
+    function renderAttention(data) {
+      const tasks = [];
+      data.pending_vacancies.forEach(v => tasks.push({
+        type: "vacancy",
+        tone: "warn",
+        title: `Проверить вакансию: ${v.title}`,
+        text: `${v.location || v.country_code} · ${v.profession_code} · источник ${v.metadata?.source || "manual"}`,
+        actions: [
+          {label: "Проверить", fn: () => vacancyStatus(v.id, "verified")},
+          {label: "Отклонить", fn: () => rejectVacancy(v.id)}
+        ]
+      }));
+      data.manual_contact.forEach(c => tasks.push({
+        type: "candidate",
+        tone: "warn",
+        title: `Связаться с кандидатом: ${c.first_name} ${c.last_name}`,
+        text: `${c.profession_code} · статус ${c.status}`,
+        actions: [
+          {label: "Документы получены", fn: () => documentsReceived(c.id)},
+          {label: "Готов к подбору", fn: () => candidateStatus(c.id, "ready_for_matching")}
+        ]
+      }));
+      data.risky_cases.forEach(m => tasks.push({
+        type: "risk",
+        tone: "bad",
+        title: `Риск по совпадению ${m.candidate_id}`,
+        text: `${m.metadata?.recommendation || "требуется проверка"} · score ${m.score}`,
+        actions: [
+          {label: "Интервью", fn: () => matchStatus(m.id, "interview")},
+          {label: "Отклонить", fn: () => matchStatus(m.id, "rejected"), danger: true}
+        ]
+      }));
+
+      $("attention-count").textContent = `${tasks.length} задач`;
+      const list = $("attention-list");
+      if (!tasks.length) {
+        list.innerHTML = `<div class="empty">Критичных задач нет. Можно проверить новые вакансии или обновить базу.</div>`;
+        return;
+      }
+      list.innerHTML = "";
+      tasks.slice(0, 8).forEach(task => list.appendChild(taskNode(task)));
+    }
+
+    function taskNode(task) {
+      const node = document.createElement("article");
+      node.className = "task";
+      node.innerHTML = `
+        <div class="task-top">
+          <div><h3>${escapeHtml(task.title)}</h3><p>${escapeHtml(task.text)}</p></div>
+          <span class="pill ${task.tone || ""}">${escapeHtml(task.type)}</span>
+        </div>
+        <div class="task-actions"></div>
+      `;
+      const actions = node.querySelector(".task-actions");
+      task.actions.forEach(action => {
+        const button = document.createElement("button");
+        button.textContent = action.label;
+        if (action.danger) button.className = "danger";
+        button.addEventListener("click", action.fn);
+        actions.appendChild(button);
+      });
+      return node;
+    }
+
+    function renderEmployers(employers) {
+      const list = $("employer-list");
+      if (!employers.length) {
+        list.innerHTML = `<div class="empty">Новых работодателей нет.</div>`;
+        return;
+      }
+      list.innerHTML = employers.slice(0, 8).map(e => `
+        <div class="row">
+          <div><strong>${escapeHtml(e.company_name)}</strong><span>${escapeHtml(e.country_code)} · ${escapeHtml(e.industry)}</span></div>
+          <button onclick="verifyEmployer('${e.id}', true)">Проверить</button>
+        </div>
+      `).join("");
+    }
+
+    function renderVacancies(vacancies) {
+      const list = $("vacancy-list");
+      if (!vacancies.length) {
+        list.innerHTML = `<div class="empty">Открытых вакансий нет.</div>`;
+        return;
+      }
+      list.innerHTML = vacancies.slice(0, 8).map(v => `
+        <div class="row">
+          <div><strong>${escapeHtml(v.title)}</strong><span>${escapeHtml(v.location || v.country_code)} · ${v.salary_min}-${v.salary_max} ${escapeHtml(v.currency)}</span></div>
+          <button onclick="runMatching('${v.id}')">Подобрать</button>
+        </div>
+      `).join("");
+    }
+
+    function renderEvents(events) {
+      const list = $("event-list");
+      if (!events.length) {
+        list.innerHTML = `<div class="empty">Событий пока нет.</div>`;
+        return;
+      }
+      list.innerHTML = events.slice(0, 10).map(event => {
+        const title = event.text || `${event.entity_type || ""} ${event.action || ""}`;
+        const meta = event.created_at || event.type || "event";
+        return `<div class="row"><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(meta)}</span></div></div>`;
+      }).join("");
+    }
+
+    function renderNextStep(data) {
+      const actionBox = $("next-actions");
+      actionBox.innerHTML = "";
+      if (data.pending_vacancies.length) {
+        const v = data.pending_vacancies[0];
+        $("next-title").textContent = "Сначала проверьте новую вакансию";
+        $("next-text").textContent = `${v.title}: после проверки её можно опубликовать или отклонить.`;
+        addAction(actionBox, "Проверить", () => vacancyStatus(v.id, "verified"), true);
+        addAction(actionBox, "Отклонить", () => rejectVacancy(v.id), false, true);
+        return;
+      }
+      if (data.new_employers.length) {
+        const e = data.new_employers[0];
+        $("next-title").textContent = "Проверьте работодателя";
+        $("next-text").textContent = `${e.company_name}: после проверки вакансии этого работодателя будут выглядеть надёжнее.`;
+        addAction(actionBox, "Проверить работодателя", () => verifyEmployer(e.id, true), true);
+        return;
+      }
+      if (data.open_vacancies.length) {
+        const v = data.open_vacancies[0];
+        $("next-title").textContent = "Запустите подбор по вакансии";
+        $("next-text").textContent = `${v.title}: ATLAS проверит кандидатов и покажет сильные совпадения.`;
+        addAction(actionBox, "Запустить подбор", () => runMatching(v.id), true);
+        return;
+      }
+      $("next-title").textContent = "Добавьте первую вакансию";
+      $("next-text").textContent = "Сейчас нет срочных задач. Можно добавить работодателя или вакансию вручную.";
+    }
+
+    function addAction(container, label, fn, primary=false, danger=false) {
+      const button = document.createElement("button");
+      button.textContent = label;
+      if (primary) button.className = "primary";
+      if (danger) button.className = "danger";
+      button.addEventListener("click", fn);
+      container.appendChild(button);
+    }
+
+    function renderSelects() {
+      const employerSelect = $("vacancy-employer");
+      employerSelect.innerHTML = state.employers.length
+        ? state.employers.map(e => `<option value="${e.id}">${escapeHtml(e.company_name)} (${e.country_code})</option>`).join("")
+        : `<option value="">Сначала создайте работодателя</option>`;
+    }
+
+    async function documentsReceived(candidateId) {
+      await patchJson(`/api/candidates/${candidateId}/documents-received`, {
+        status: "ready_for_matching",
+        actor_id: "coordinator",
+        note: "Documents received from simplified CRM"
+      });
+      await loadAll();
+    }
+    async function candidateStatus(candidateId, status) {
+      await patchJson(`/api/candidates/${candidateId}/status`, {status, actor_id: "coordinator", note: `CRM: ${status}`});
+      await loadAll();
+    }
+    async function verifyEmployer(employerId, verified) {
+      await patchJson(`/api/employers/${employerId}/verify`, {verified, actor_id: "coordinator", note: "Verified from simplified CRM"});
+      await loadAll();
+    }
+    async function vacancyStatus(vacancyId, status) {
+      await patchJson(`/api/vacancies/${vacancyId}/status`, {status, actor_id: "coordinator", note: `CRM: ${status}`});
+      await loadAll();
+    }
+    async function rejectVacancy(vacancyId) {
+      await patchJson(`/api/vacancies/${vacancyId}/status`, {status: "rejected", actor_id: "coordinator", note: "insufficient_information"});
+      await loadAll();
+    }
+    async function matchStatus(matchId, status) {
+      await patchJson(`/api/matches/${matchId}/status`, {status, actor_id: "coordinator", note: `CRM: ${status}`});
+      await loadAll();
+    }
+    async function runMatching(vacancyId) {
+      const result = await postJson(`/api/vacancies/${vacancyId}/match`, {minimum_score: 60});
+      setStatus(`Подбор завершён: ${result.matches.length} совпадений.`);
+      await loadAll();
+    }
+    async function seedDemo() {
+      setStatus("Добавляю demo-данные...");
+      await fetch("/api/demo/seed", {method: "POST"});
+      await loadAll();
+    }
+
+    $("candidate-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const result = await postJson("/api/candidates", {
+        first_name: data.first_name,
+        last_name: data.last_name,
+        email: data.email,
+        phone: data.phone,
+        country_code: data.country_code.toUpperCase(),
+        profession_code: data.profession_code,
+        languages: splitList(data.languages),
+        years_of_experience: Number(data.years_of_experience || 0),
+        metadata: {}
+      });
+      setStatus(`Кандидат создан: ${result.candidate.id}`);
+      await loadAll();
+    });
+    $("employer-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const result = await postJson("/api/employers", {
+        company_name: data.company_name,
+        contact_email: data.contact_email,
+        contact_phone: data.contact_phone,
+        country_code: data.country_code.toUpperCase(),
+        industry: data.industry,
+        verified: data.verified === "true"
+      });
+      setStatus(`Работодатель создан: ${result.employer.id}`);
+      await loadAll();
+    });
+    $("vacancy-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+      if (!data.employer_id) {
+        setStatus("Сначала создайте работодателя.");
+        return;
+      }
+      const result = await postJson("/api/vacancies", {
+        employer_id: data.employer_id,
+        title: data.title,
+        country_code: data.country_code.toUpperCase(),
+        profession_code: data.profession_code,
+        salary_min: Number(data.salary_min || 0),
+        salary_max: Number(data.salary_max || 0),
+        currency: data.currency.toUpperCase(),
+        required_languages: splitList(data.required_languages),
+        required_documents: splitList(data.required_documents),
+        location: data.location,
+        metadata: {source: "crm_manual"}
+      });
+      setStatus(`Вакансия создана: ${result.vacancy.id}`);
+      await loadAll();
+    });
+
+    loadAll().catch(error => setStatus(`Ошибка: ${error.message}`));
+  </script>
+  {{OBSERVABILITY_BODY}}
+</body>
+</html>
+""".replace("{{BRAND_LOGO_CSS}}", BRAND_LOGO_CSS).replace("{{ATLAS_DESIGN_SYSTEM_CSS}}", ATLAS_DESIGN_SYSTEM_CSS).replace("{{BRAND_MARK_HTML}}", BRAND_MARK_HTML).replace("{{OBSERVABILITY_HEAD}}", observability_head_html()).replace("{{OBSERVABILITY_BODY}}", observability_body_html("dashboard"))
