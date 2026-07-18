@@ -63,6 +63,7 @@ from services.dynamic_interview import DynamicInterviewService
 from services.entitlements import EntitlementRepositories, EntitlementService
 from services.rodo_service import RodoService
 from services.skill_gap_analysis import SkillGapService
+from services.product_architecture import ProductArchitectureService
 from workflows.operations_workflow import OperationsWorkflow
 
 
@@ -119,6 +120,11 @@ def get_rodo_service() -> RodoService:
         employers=EmployerRepository(database),
         users=UserRepository(database),
     )
+
+
+@lru_cache(maxsize=1)
+def get_product_architecture_service() -> ProductArchitectureService:
+    return ProductArchitectureService()
 
 
 def get_competency_intelligence_service() -> CompetencyIntelligenceService:

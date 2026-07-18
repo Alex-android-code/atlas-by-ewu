@@ -1,0 +1,64 @@
+{
+  "version": "atlas-pipelines-1.0",
+  "pipelines": {
+    "candidate": [
+      "new",
+      "profile_incomplete",
+      "verification",
+      "ready",
+      "matching",
+      "interview",
+      "offer",
+      "hired",
+      "working",
+      "inactive",
+      "rejected",
+      "blocked"
+    ],
+    "vacancy": [
+      "draft",
+      "awaiting_approval",
+      "active",
+      "matching",
+      "interviewing",
+      "offer_stage",
+      "filled",
+      "paused",
+      "closed",
+      "cancelled"
+    ],
+    "employer": [
+      "lead",
+      "qualified",
+      "contacted",
+      "meeting",
+      "proposal",
+      "negotiation",
+      "active_client",
+      "on_hold",
+      "lost",
+      "blocked"
+    ],
+    "deal": [
+      "new_opportunity",
+      "analysis",
+      "proposal",
+      "negotiation",
+      "contract",
+      "delivery",
+      "completed",
+      "lost",
+      "disputed"
+    ],
+    "document": [
+      "uploaded",
+      "processing",
+      "awaiting_verification",
+      "verified",
+      "rejected",
+      "expiring",
+      "expired",
+      "archived"
+    ]
+  }
+}

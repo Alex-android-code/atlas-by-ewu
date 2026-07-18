@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
 from api.agent import AGENT_DASHBOARD_HTML, AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
+from api.control_center import CONTROL_CENTER_HTML
 from api.dashboard import DASHBOARD_HTML
 from api.dependencies import (
     get_agent_profile_service,
@@ -25,6 +26,7 @@ from api.dependencies import (
     get_dynamic_interview_service,
     get_entitlement_service,
     get_operations_workflow,
+    get_product_architecture_service,
     get_rodo_service,
     get_skill_gap_service,
 )
@@ -218,6 +220,13 @@ def dashboard(request: Request) -> str:
     if not _is_admin_authorized(request):
         return LOGIN_HTML
     return DASHBOARD_HTML
+
+
+@app.get("/control-center", response_class=HTMLResponse)
+def control_center(request: Request) -> str:
+    if not _is_admin_authorized(request):
+        return LOGIN_HTML
+    return CONTROL_CENTER_HTML
 
 
 @app.post("/api/login")
@@ -855,6 +864,31 @@ def get_dashboard(request: Request) -> dict:
     _require_admin(request)
     _sync_existing_public_profiles_to_crm()
     return get_crm_service().coordinator_dashboard()
+
+
+@app.get("/api/product/architecture")
+def get_product_architecture(request: Request) -> dict:
+    _require_admin(request)
+    return get_product_architecture_service().product_architecture()
+
+
+@app.get("/api/product/pipelines")
+def get_product_pipelines(request: Request) -> dict:
+    _require_admin(request)
+    return get_product_architecture_service().pipelines()
+
+
+@app.get("/api/product/navigation/{role}")
+def get_product_navigation(role: str, request: Request) -> dict:
+    _require_admin(request)
+    return {"role": role, "navigation": get_product_architecture_service().navigation_for_role(role)}
+
+
+@app.get("/api/product/crm-workspace")
+def get_product_crm_workspace(request: Request, role: str = "admin") -> dict:
+    _require_admin(request)
+    _sync_existing_public_profiles_to_crm()
+    return get_product_architecture_service().crm_workspace(get_crm_service(), role=role)
 
 
 @app.post("/api/analytics/event")

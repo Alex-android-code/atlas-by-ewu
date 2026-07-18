@@ -1,0 +1,58 @@
+{
+  "version": "atlas-product-architecture-1.0",
+  "contours": [
+    {
+      "code": "personal_atlas",
+      "label": "Personal ATLAS",
+      "description": "Personal AI operating system for workers and candidates."
+    },
+    {
+      "code": "business_atlas",
+      "label": "Business ATLAS",
+      "description": "AI workforce and recruitment operating system for employers."
+    },
+    {
+      "code": "control_center",
+      "label": "ATLAS Control Center",
+      "description": "Administrative operating system for CRM, risk, audit, AI and platform operations."
+    }
+  ],
+  "role_navigation": {
+    "candidate": ["home", "ai_agent", "opportunities", "career", "documents", "learning", "profile"],
+    "worker": ["home", "ai_agent", "opportunities", "career", "documents", "learning", "profile"],
+    "employer_owner": ["overview", "ai_advisor", "workforce", "recruitment", "vacancies", "analytics", "learning", "company", "billing"],
+    "employer_manager": ["overview", "ai_advisor", "workforce", "recruitment", "vacancies", "analytics", "learning", "company"],
+    "coordinator": ["command_center", "crm", "candidates", "companies", "vacancies", "deals", "documents", "learning", "ai_control", "risks", "support", "audit"],
+    "admin": ["command_center", "crm", "candidates", "companies", "vacancies", "deals", "documents", "learning", "partners", "finance", "ai_control", "risks", "support", "audit", "settings"],
+    "super_admin": ["command_center", "crm", "candidates", "companies", "vacancies", "deals", "documents", "learning", "partners", "finance", "ai_control", "risks", "support", "audit", "settings"]
+  },
+  "modules": {
+    "home": {"label": "Home", "contour": "personal_atlas"},
+    "ai_agent": {"label": "AI Agent", "contour": "personal_atlas"},
+    "opportunities": {"label": "Opportunities", "contour": "personal_atlas"},
+    "career": {"label": "Career", "contour": "personal_atlas"},
+    "documents": {"label": "Documents", "contour": "control_center"},
+    "learning": {"label": "Learning", "contour": "business_atlas"},
+    "profile": {"label": "Profile", "contour": "personal_atlas"},
+    "overview": {"label": "Overview", "contour": "business_atlas"},
+    "ai_advisor": {"label": "AI Advisor", "contour": "business_atlas"},
+    "workforce": {"label": "Workforce", "contour": "business_atlas"},
+    "recruitment": {"label": "Recruitment", "contour": "business_atlas"},
+    "vacancies": {"label": "Vacancies", "contour": "business_atlas"},
+    "analytics": {"label": "Analytics", "contour": "business_atlas"},
+    "company": {"label": "Company", "contour": "business_atlas"},
+    "billing": {"label": "Billing", "contour": "business_atlas"},
+    "command_center": {"label": "Command Center", "contour": "control_center"},
+    "crm": {"label": "CRM", "contour": "control_center"},
+    "candidates": {"label": "Candidates", "contour": "control_center"},
+    "companies": {"label": "Companies", "contour": "control_center"},
+    "deals": {"label": "Deals", "contour": "control_center"},
+    "partners": {"label": "Partners", "contour": "control_center"},
+    "finance": {"label": "Finance", "contour": "control_center"},
+    "ai_control": {"label": "AI Control", "contour": "control_center"},
+    "risks": {"label": "Risks", "contour": "control_center"},
+    "support": {"label": "Support", "contour": "control_center"},
+    "audit": {"label": "Audit", "contour": "control_center"},
+    "settings": {"label": "Settings", "contour": "control_center"}
+  }
+}
