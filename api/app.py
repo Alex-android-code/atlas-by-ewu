@@ -21,6 +21,7 @@ from api.dependencies import (
     get_dynamic_interview_service,
     get_operations_workflow,
     get_rodo_service,
+    get_skill_gap_service,
 )
 from api.employer import EMPLOYER_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
@@ -45,6 +46,7 @@ from api.schemas import (
     MatchRequest,
     SkillGapAnalysisRequest,
     StatusUpdate,
+    TargetCompetencyRequirement,
     UserCompetencyCreate,
     VacancyCreate,
     VerificationUpdate,
@@ -338,15 +340,25 @@ def create_employer_competency_requirement(
 @app.post("/api/competencies/skill-gaps")
 def analyze_skill_gaps(payload: SkillGapAnalysisRequest, request: Request) -> dict:
     _require_admin(request)
-    service = get_competency_intelligence_service()
+    competency_service = get_competency_intelligence_service()
     requirements = [
         item
-        for item in service.repositories.employer_requirements.list()
+        for item in competency_service.repositories.employer_requirements.list()
         if (not payload.employer_id or item.employer_id == payload.employer_id)
         and (not payload.vacancy_id or item.vacancy_id == payload.vacancy_id)
     ]
-    gaps = service.analyze_skill_gaps_for_user(payload.user_id, requirements)
-    return {"status": "ok", "skill_gaps": [gap.to_dict() for gap in gaps]}
+    target_requirements = [
+        _target_requirement_from_payload(item)
+        for item in payload.target_requirements
+    ]
+    analysis = get_skill_gap_service().analyze(
+        user_id=payload.user_id,
+        saved_requirements=requirements,
+        target_requirements=target_requirements,
+        career_goal=payload.career_goal,
+        target_country=payload.target_country,
+    )
+    return {"status": "ok", **analysis}
 
 
 @app.post("/api/competencies/development-plans")
@@ -360,6 +372,19 @@ def create_development_plan(payload: DevelopmentPlanCreate, request: Request) ->
         if item.user_id == payload.user_id and (not selected_gap_ids or item.id in selected_gap_ids)
     ]
     return service.create_development_plan_from_gaps(payload.user_id, gaps, title=payload.title)
+
+
+def _target_requirement_from_payload(payload: TargetCompetencyRequirement):
+    from services.skill_gap_analysis import TargetRequirement
+
+    return TargetRequirement(
+        competency_name=payload.competency_name,
+        required_level=payload.required_level,
+        importance=payload.importance,
+        source=payload.source,
+        employer_id=payload.employer_id,
+        vacancy_id=payload.vacancy_id,
+    )
 
 
 @app.post("/api/interview/start")

@@ -135,10 +135,22 @@ class EmployerCompetencyRequirementCreate(BaseModel):
     importance: int = Field(default=3, ge=0, le=5)
 
 
+class TargetCompetencyRequirement(BaseModel):
+    competency_name: str
+    required_level: int = Field(default=1, ge=0, le=5)
+    importance: int = Field(default=3, ge=0, le=5)
+    source: str = "market_requirement"
+    employer_id: str | None = None
+    vacancy_id: str | None = None
+
+
 class SkillGapAnalysisRequest(BaseModel):
     user_id: str
     employer_id: str | None = None
     vacancy_id: str | None = None
+    career_goal: str = ""
+    target_country: str = ""
+    target_requirements: list[TargetCompetencyRequirement] = Field(default_factory=list)
 
 
 class DevelopmentPlanCreate(BaseModel):

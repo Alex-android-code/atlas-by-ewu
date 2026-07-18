@@ -36,6 +36,7 @@ from services.competency_intelligence import CompetencyIntelligenceRepositories,
 from services.country_config_loader import CountryConfigLoader
 from services.dynamic_interview import DynamicInterviewService
 from services.rodo_service import RodoService
+from services.skill_gap_analysis import SkillGapService
 from workflows.operations_workflow import OperationsWorkflow
 
 
@@ -113,3 +114,7 @@ def get_dynamic_interview_service() -> DynamicInterviewService:
         sessions=DynamicInterviewSessionRepository(get_database()),
         competency_service=get_competency_intelligence_service(),
     )
+
+
+def get_skill_gap_service() -> SkillGapService:
+    return SkillGapService(competency_service=get_competency_intelligence_service())
