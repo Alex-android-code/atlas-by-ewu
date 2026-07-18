@@ -14,7 +14,13 @@ from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
 from api.agent import AGENT_DASHBOARD_HTML, AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
 from api.dashboard import DASHBOARD_HTML
-from api.dependencies import get_agent_profile_service, get_crm_service, get_operations_workflow, get_rodo_service
+from api.dependencies import (
+    get_agent_profile_service,
+    get_competency_intelligence_service,
+    get_crm_service,
+    get_operations_workflow,
+    get_rodo_service,
+)
 from api.employer import EMPLOYER_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
 from api.landing import LANDING_HTML
@@ -29,10 +35,14 @@ from api.schemas import (
     ConsentCreate,
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
+    DevelopmentPlanCreate,
     EmployerCreate,
+    EmployerCompetencyRequirementCreate,
     LoginRequest,
     MatchRequest,
+    SkillGapAnalysisRequest,
     StatusUpdate,
+    UserCompetencyCreate,
     VacancyCreate,
     VerificationUpdate,
 )
@@ -278,6 +288,75 @@ def update_rodo_request_status(
 def export_rodo_subject_data(subject_id: str, request: Request) -> dict:
     _require_admin(request)
     return get_rodo_service().export_subject_data(subject_id)
+
+
+@app.get("/api/competencies/users/{user_id}")
+def get_user_competency_map(user_id: str, request: Request) -> dict:
+    _require_admin(request)
+    return get_competency_intelligence_service().competency_map_for_user(user_id)
+
+
+@app.post("/api/competencies/users")
+def create_user_competency(payload: UserCompetencyCreate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        user_competency = get_competency_intelligence_service().add_user_competency(
+            user_id=payload.user_id,
+            competency_name=payload.competency_name,
+            current_level=payload.current_level,
+            target_level=payload.target_level,
+            source=payload.source,
+            confidence_score=payload.confidence_score,
+            evidence_reference=payload.evidence_reference,
+            years_of_experience=payload.years_of_experience,
+            visibility=payload.visibility,
+        )
+        return {"status": "ok", "user_competency": user_competency.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/competencies/employer-requirements")
+def create_employer_competency_requirement(
+    payload: EmployerCompetencyRequirementCreate,
+    request: Request,
+) -> dict:
+    _require_admin(request)
+    requirement = get_competency_intelligence_service().add_employer_requirement(
+        employer_id=payload.employer_id,
+        competency_name=payload.competency_name,
+        required_level=payload.required_level,
+        vacancy_id=payload.vacancy_id,
+        importance=payload.importance,
+    )
+    return {"status": "ok", "requirement": requirement.to_dict()}
+
+
+@app.post("/api/competencies/skill-gaps")
+def analyze_skill_gaps(payload: SkillGapAnalysisRequest, request: Request) -> dict:
+    _require_admin(request)
+    service = get_competency_intelligence_service()
+    requirements = [
+        item
+        for item in service.repositories.employer_requirements.list()
+        if (not payload.employer_id or item.employer_id == payload.employer_id)
+        and (not payload.vacancy_id or item.vacancy_id == payload.vacancy_id)
+    ]
+    gaps = service.analyze_skill_gaps_for_user(payload.user_id, requirements)
+    return {"status": "ok", "skill_gaps": [gap.to_dict() for gap in gaps]}
+
+
+@app.post("/api/competencies/development-plans")
+def create_development_plan(payload: DevelopmentPlanCreate, request: Request) -> dict:
+    _require_admin(request)
+    service = get_competency_intelligence_service()
+    selected_gap_ids = set(payload.skill_gap_ids)
+    gaps = [
+        item
+        for item in service.repositories.skill_gaps.list()
+        if item.user_id == payload.user_id and (not selected_gap_ids or item.id in selected_gap_ids)
+    ]
+    return service.create_development_plan_from_gaps(payload.user_id, gaps, title=payload.title)
 
 
 @app.get("/{language_code}", response_class=HTMLResponse)

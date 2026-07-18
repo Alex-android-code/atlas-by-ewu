@@ -309,6 +309,178 @@ class DataSubjectRequest(SerializableModel):
 
 
 @dataclass
+class CompetencyCategory(SerializableModel):
+    name: str
+    description: str = ""
+    id: str = field(default_factory=lambda: new_id("CCAT"))
+    parent_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Competency(SerializableModel):
+    name: str
+    category_id: str | None = None
+    description: str = ""
+    id: str = field(default_factory=lambda: new_id("COMP"))
+    aliases: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CompetencyRelationship(SerializableModel):
+    source_competency_id: str
+    target_competency_id: str
+    relationship_type: str
+    id: str = field(default_factory=lambda: new_id("CREL"))
+    weight: float = 1.0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProfessionProfile(SerializableModel):
+    profession_code: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("PROF"))
+    industry: str = ""
+    description: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ProfessionCompetencyModel(SerializableModel):
+    profession_profile_id: str
+    competency_id: str
+    required_level: int = 1
+    importance: int = 3
+    id: str = field(default_factory=lambda: new_id("PCM"))
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UserCompetency(SerializableModel):
+    competency_id: str
+    user_id: str
+    current_level: int = 1
+    target_level: int = 1
+    source: str = "self_declared"
+    confidence_score: float = 0.3
+    evidence_type: str = "self_declared"
+    evidence_reference: str = ""
+    years_of_experience: float = 0.0
+    last_used_at: str | None = None
+    last_verified_at: str | None = None
+    verification_status: str = "unverified"
+    expiry_date: str | None = None
+    visibility: str = "private"
+    id: str = field(default_factory=lambda: new_id("UCOMP"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CompetencyEvidence(SerializableModel):
+    user_competency_id: str
+    evidence_type: str
+    reference: str
+    id: str = field(default_factory=lambda: new_id("CEVD"))
+    status: str = "submitted"
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CompetencyAssessment(SerializableModel):
+    user_competency_id: str
+    assessment_type: str
+    score: float
+    id: str = field(default_factory=lambda: new_id("CASM"))
+    assessed_by: str = "system"
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CompetencyConfidenceHistory(SerializableModel):
+    user_competency_id: str
+    previous_score: float
+    new_score: float
+    reason: str
+    id: str = field(default_factory=lambda: new_id("CCH"))
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SkillGap(SerializableModel):
+    user_id: str
+    competency_id: str
+    current_level: int
+    target_level: int
+    id: str = field(default_factory=lambda: new_id("SGAP"))
+    gap_size: int = 0
+    priority: str = "medium"
+    source: str = "system"
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DevelopmentPlan(SerializableModel):
+    user_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("DPLAN"))
+    status: str = "draft"
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DevelopmentPlanStep(SerializableModel):
+    development_plan_id: str
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("DPSTEP"))
+    status: str = "planned"
+    order: int = 0
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class EmployerCompetencyRequirement(SerializableModel):
+    employer_id: str
+    competency_id: str
+    required_level: int
+    id: str = field(default_factory=lambda: new_id("ECR"))
+    vacancy_id: str | None = None
+    importance: int = 3
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class WorkforceCompetencyGap(SerializableModel):
+    employer_id: str
+    competency_id: str
+    current_coverage: float
+    required_coverage: float
+    id: str = field(default_factory=lambda: new_id("WCG"))
+    priority: str = "medium"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class UpskillingOpportunity(SerializableModel):
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("UPSK"))
+    provider: str = ""
+    url: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"

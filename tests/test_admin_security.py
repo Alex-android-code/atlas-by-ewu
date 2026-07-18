@@ -65,6 +65,10 @@ class AdminSecurityTests(unittest.TestCase):
             app_module.export_rodo_subject_data("user-1", request())
         self.assertEqual(ctx.exception.status_code, 403)
 
+        with self.assertRaises(HTTPException) as ctx:
+            app_module.get_user_competency_map("user-1", request())
+        self.assertEqual(ctx.exception.status_code, 403)
+
     def test_admin_login_rate_limit_blocks_repeated_attempts(self):
         for _ in range(app_module.ADMIN_LOGIN_LIMIT_PER_MINUTE):
             app_module._enforce_admin_login_rate_limit("1.2.3.4")

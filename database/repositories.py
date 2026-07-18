@@ -10,17 +10,32 @@ from core.models import (
     AgentRecommendation,
     Candidate,
     CareerGoal,
+    Competency,
+    CompetencyAssessment,
+    CompetencyCategory,
+    CompetencyConfidenceHistory,
+    CompetencyEvidence,
+    CompetencyRelationship,
     ConsentRecord,
     DataSubjectRequest,
+    DevelopmentPlan,
+    DevelopmentPlanStep,
     Document,
     Employer,
+    EmployerCompetencyRequirement,
     Match,
     Opportunity,
+    ProfessionCompetencyModel,
+    ProfessionProfile,
     ProfessionalDNA,
     Subscription,
+    SkillGap,
     User,
+    UpskillingOpportunity,
+    UserCompetency,
     UserPreference,
     Vacancy,
+    WorkforceCompetencyGap,
 )
 from database.json_database import JsonDatabase
 
@@ -162,3 +177,78 @@ class DataSubjectRequestRepository(JsonRepository[DataSubjectRequest]):
 class SubscriptionRepository(JsonRepository[Subscription]):
     collection = "subscriptions"
     model_class = Subscription
+
+
+class CompetencyCategoryRepository(JsonRepository[CompetencyCategory]):
+    collection = "competency_categories"
+    model_class = CompetencyCategory
+
+
+class CompetencyRepository(JsonRepository[Competency]):
+    collection = "competencies"
+    model_class = Competency
+
+
+class CompetencyRelationshipRepository(JsonRepository[CompetencyRelationship]):
+    collection = "competency_relationships"
+    model_class = CompetencyRelationship
+
+
+class ProfessionProfileRepository(JsonRepository[ProfessionProfile]):
+    collection = "profession_profiles"
+    model_class = ProfessionProfile
+
+
+class ProfessionCompetencyModelRepository(JsonRepository[ProfessionCompetencyModel]):
+    collection = "profession_competency_models"
+    model_class = ProfessionCompetencyModel
+
+
+class UserCompetencyRepository(JsonRepository[UserCompetency]):
+    collection = "user_competencies"
+    model_class = UserCompetency
+
+
+class CompetencyEvidenceRepository(JsonRepository[CompetencyEvidence]):
+    collection = "competency_evidence"
+    model_class = CompetencyEvidence
+
+
+class CompetencyAssessmentRepository(JsonRepository[CompetencyAssessment]):
+    collection = "competency_assessments"
+    model_class = CompetencyAssessment
+
+
+class CompetencyConfidenceHistoryRepository(JsonRepository[CompetencyConfidenceHistory]):
+    collection = "competency_confidence_history"
+    model_class = CompetencyConfidenceHistory
+
+
+class SkillGapRepository(JsonRepository[SkillGap]):
+    collection = "skill_gaps"
+    model_class = SkillGap
+
+
+class DevelopmentPlanRepository(JsonRepository[DevelopmentPlan]):
+    collection = "development_plans"
+    model_class = DevelopmentPlan
+
+
+class DevelopmentPlanStepRepository(JsonRepository[DevelopmentPlanStep]):
+    collection = "development_plan_steps"
+    model_class = DevelopmentPlanStep
+
+
+class EmployerCompetencyRequirementRepository(JsonRepository[EmployerCompetencyRequirement]):
+    collection = "employer_competency_requirements"
+    model_class = EmployerCompetencyRequirement
+
+
+class WorkforceCompetencyGapRepository(JsonRepository[WorkforceCompetencyGap]):
+    collection = "workforce_competency_gaps"
+    model_class = WorkforceCompetencyGap
+
+
+class UpskillingOpportunityRepository(JsonRepository[UpskillingOpportunity]):
+    collection = "upskilling_opportunities"
+    model_class = UpskillingOpportunity

@@ -11,20 +11,27 @@ from database.repositories import (
     CandidateRepository,
     ActivityRepository,
     CareerGoalRepository,
+    CompetencyRepository,
     ConsentRepository,
     DataSubjectRequestRepository,
+    DevelopmentPlanRepository,
+    DevelopmentPlanStepRepository,
     DocumentRepository,
     EmployerRepository,
+    EmployerCompetencyRequirementRepository,
     MatchRepository,
     OpportunityRepository,
     ProfessionalDNARepository,
     SubscriptionRepository,
+    SkillGapRepository,
     UserRepository,
+    UserCompetencyRepository,
     UserPreferenceRepository,
     VacancyRepository,
 )
 from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
+from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
 from services.rodo_service import RodoService
 from workflows.operations_workflow import OperationsWorkflow
@@ -82,4 +89,18 @@ def get_rodo_service() -> RodoService:
         candidates=CandidateRepository(database),
         employers=EmployerRepository(database),
         users=UserRepository(database),
+    )
+
+
+def get_competency_intelligence_service() -> CompetencyIntelligenceService:
+    database = get_database()
+    return CompetencyIntelligenceService(
+        CompetencyIntelligenceRepositories(
+            competencies=CompetencyRepository(database),
+            user_competencies=UserCompetencyRepository(database),
+            employer_requirements=EmployerCompetencyRequirementRepository(database),
+            skill_gaps=SkillGapRepository(database),
+            development_plans=DevelopmentPlanRepository(database),
+            development_plan_steps=DevelopmentPlanStepRepository(database),
+        )
     )

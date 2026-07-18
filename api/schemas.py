@@ -115,6 +115,38 @@ class DataSubjectRequestStatusUpdate(BaseModel):
     note: str = ""
 
 
+class UserCompetencyCreate(BaseModel):
+    user_id: str
+    competency_name: str
+    current_level: int = Field(default=1, ge=0, le=5)
+    target_level: int = Field(default=1, ge=0, le=5)
+    source: str = "self_declared"
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    evidence_reference: str = ""
+    years_of_experience: float = Field(default=0.0, ge=0)
+    visibility: str = "private"
+
+
+class EmployerCompetencyRequirementCreate(BaseModel):
+    employer_id: str
+    competency_name: str
+    required_level: int = Field(default=1, ge=0, le=5)
+    vacancy_id: str | None = None
+    importance: int = Field(default=3, ge=0, le=5)
+
+
+class SkillGapAnalysisRequest(BaseModel):
+    user_id: str
+    employer_id: str | None = None
+    vacancy_id: str | None = None
+
+
+class DevelopmentPlanCreate(BaseModel):
+    user_id: str
+    title: str = "Development plan"
+    skill_gap_ids: list[str] = Field(default_factory=list)
+
+
 class AgentOnboardingAnswer(BaseModel):
     user_id: str
     field: str
