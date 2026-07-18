@@ -101,6 +101,8 @@ def update_user_profile_from_message(
     profile["country"] = _first_alias(text, COUNTRY_ALIASES, profile.get("country"))
     profile["languages"] = sorted(set(profile.get("languages", [])) | set(_detect_languages(text)))
     profile["documents"] = sorted(set(profile.get("documents", [])) | set(_detect_documents(text)))
+    profile["email"] = _detect_email(message, profile.get("email"))
+    profile["phone"] = _detect_phone(message, profile.get("phone") or profile.get("phone_number"))
     profile["desired_salary"] = _detect_salary(text, profile.get("desired_salary"))
     profile["experience_years"] = _detect_experience(text, profile.get("experience_years"))
     profile["ready_from"] = _detect_ready_from(text, profile.get("ready_from"))
@@ -284,10 +286,23 @@ def _detect_documents(text: str) -> list[str]:
 
 
 def _detect_salary(text: str, current: Any) -> int | None:
-    match = re.search(r"(\d{4,6})\s?(eur|euro|pln|zl|zł)?", text)
+    salary_context = any(word in text for word in ("salary", "зарплат", "ставк", "оплат", "pln", "eur", "euro", "zl", "zł"))
+    if not salary_context:
+        return current
+    match = re.search(r"(?<![\d+])(\d{4,6})(?!\d)\s?(eur|euro|pln|zl|zł)?", text)
     if match:
         return int(match.group(1))
     return current
+
+
+def _detect_email(message: str, current: Any) -> str | None:
+    match = re.search(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", message, flags=re.IGNORECASE)
+    return match.group(0) if match else current
+
+
+def _detect_phone(message: str, current: Any) -> str | None:
+    match = re.search(r"\+?\d[\d\s().-]{7,}\d", message)
+    return match.group(0).strip() if match else current
 
 
 def _detect_experience(text: str, current: Any) -> int | None:

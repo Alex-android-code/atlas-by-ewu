@@ -2,6 +2,7 @@
 
 import os
 import hashlib
+import json
 import secrets
 from pathlib import Path
 from time import time
@@ -648,7 +649,11 @@ def save_agent_onboarding_answer(payload: AgentOnboardingAnswer) -> dict:
 
 @app.post("/api/agent/onboarding/complete")
 def complete_agent_onboarding(payload: AgentOnboardingComplete) -> dict:
-    return get_agent_profile_service().complete_onboarding(payload.user_id)
+    result = get_agent_profile_service().complete_onboarding(payload.user_id)
+    professional_dna = result.get("dashboard", {}).get("professional_dna", {})
+    crm_sync = _sync_agent_profile_to_crm(payload.user_id, professional_dna)
+    result["crm_sync"] = crm_sync
+    return result
 
 
 @app.get("/api/agent/dashboard/{user_id}")
@@ -817,10 +822,12 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
     profile.setdefault("messages", []).append({"role": "assistant", "content": assistant_reply})
     memory.profile_data = profile
     memory_store.save(memory)
+    crm_sync = _sync_chat_profile_to_crm(payload.user_id, profile, agent_type)
     return {
         "reply": assistant_reply,
         "ai": ai_response,
         "profile": profile,
+        "crm_sync": crm_sync,
         "employer_experience": employer_experience,
         "intent": profile["detected_intent"],
         "language": {
@@ -846,6 +853,7 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
 @app.get("/api/dashboard")
 def get_dashboard(request: Request) -> dict:
     _require_admin(request)
+    _sync_existing_public_profiles_to_crm()
     return get_crm_service().coordinator_dashboard()
 
 
@@ -1226,6 +1234,280 @@ def _candidate_reply(profile: dict, ai_response: dict) -> str:
     if reply:
         return reply
     return "coordinator.welcome"
+
+
+def _sync_chat_profile_to_crm(user_id: str, profile: dict, agent_type: str) -> dict:
+    if agent_type == "employer":
+        return _sync_employer_chat_profile_to_crm(user_id, profile)
+    return _sync_candidate_chat_profile_to_crm(user_id, profile)
+
+
+def _sync_existing_public_profiles_to_crm() -> dict:
+    synced: list[dict] = []
+    memory_store = get_operations_workflow().memory_store
+    storage_dir = getattr(memory_store, "storage_dir", None)
+    if storage_dir:
+        for path in storage_dir.glob("*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            user_id = str(data.get("user_id") or path.stem)
+            profile = data.get("profile_data") if isinstance(data.get("profile_data"), dict) else {}
+            if not profile:
+                continue
+            detected = profile.get("detected_intent") if isinstance(profile.get("detected_intent"), dict) else {}
+            role = detected.get("agent_type") or profile.get("scenario") or "candidate"
+            result = _sync_chat_profile_to_crm(user_id, profile, str(role))
+            if result.get("status") == "created":
+                synced.append(result)
+    try:
+        for profile in get_agent_profile_service().profiles.list():
+            result = _sync_agent_profile_to_crm(profile.user_id, profile.to_dict())
+            if result.get("status") == "created":
+                synced.append(result)
+    except Exception:
+        pass
+    return {"synced": synced, "count": len(synced)}
+
+
+def _sync_candidate_chat_profile_to_crm(user_id: str, profile: dict) -> dict:
+    crm = get_crm_service()
+    existing = _candidate_by_source_user_id(user_id)
+    if existing:
+        return {"status": "already_exists", "entity": "candidate", "id": existing.id}
+    if not _candidate_profile_has_lead_signal(profile):
+        return {"status": "not_ready", "entity": "candidate"}
+
+    first_name, last_name = _split_full_name(
+        profile.get("full_name")
+        or profile.get("name")
+        or profile.get("contact_name")
+        or f"ATLAS Lead {str(user_id)[-4:]}"
+    )
+    candidate = Candidate(
+        first_name=first_name,
+        last_name=last_name,
+        email=str(profile.get("email") or f"{_safe_id_fragment(user_id)}@atlas.local"),
+        phone=str(profile.get("phone") or profile.get("phone_number") or profile.get("contact") or "not_provided"),
+        country_code=_country_code_from_value(profile.get("country") or profile.get("current_country") or "UA"),
+        profession_code=_profession_code_from_value(profile.get("profession") or "general"),
+        languages=_language_list(profile.get("languages")),
+        years_of_experience=_safe_int(profile.get("experience_years"), 0),
+        user_id=user_id,
+        metadata={
+            "source": "public_ai_chat",
+            "source_user_id": user_id,
+            "preferred_language": profile.get("preferred_language"),
+            "desired_country_code": _country_code_from_value(
+                profile.get("desired_country")
+                or profile.get("preferred_destination")
+                or profile.get("country")
+                or "PL"
+            ),
+            "desired_salary": _safe_int(profile.get("desired_salary"), 0),
+            "ready_from": profile.get("ready_from"),
+            "document_types": _string_list(profile.get("documents")),
+            "profile_snapshot": _compact_profile_snapshot(profile),
+        },
+    )
+    result = get_operations_workflow().onboard_candidate(candidate)
+    return {"status": "created", "entity": "candidate", "id": result["candidate"]["id"]}
+
+
+def _sync_agent_profile_to_crm(user_id: str, professional_dna: dict) -> dict:
+    existing = _candidate_by_source_user_id(user_id)
+    if existing:
+        return {"status": "already_exists", "entity": "candidate", "id": existing.id}
+    if not _agent_profile_has_lead_signal(professional_dna):
+        return {"status": "not_ready", "entity": "candidate"}
+    first_name, last_name = _split_full_name(
+        professional_dna.get("personal_information", {}).get("full_name")
+        or f"ATLAS Agent {str(user_id)[-4:]}"
+    )
+    location = professional_dna.get("current_location") or {}
+    contact = professional_dna.get("contact_information") or {}
+    salary = professional_dna.get("salary_expectations") or {}
+    candidate = Candidate(
+        first_name=first_name,
+        last_name=last_name,
+        email=str(contact.get("email") or f"{_safe_id_fragment(user_id)}@atlas.local"),
+        phone=str(contact.get("phone") or "not_provided"),
+        country_code=_country_code_from_value(location.get("country") or "UA"),
+        profession_code=_profession_code_from_value(
+            professional_dna.get("professional_summary")
+            or (professional_dna.get("preferred_roles") or ["general"])[0]
+        ),
+        languages=_language_list(professional_dna.get("languages")),
+        years_of_experience=_safe_int(len(professional_dna.get("work_experience") or []), 0),
+        user_id=user_id,
+        metadata={
+            "source": "agent_onboarding",
+            "source_user_id": user_id,
+            "desired_country_code": _country_code_from_value(
+                professional_dna.get("relocation_preferences", {}).get("preferred_country")
+                or location.get("country")
+                or "PL"
+            ),
+            "desired_salary": salary.get("expected"),
+            "document_types": ["cv"] if professional_dna.get("uploaded_cv") else [],
+            "profile_photo": professional_dna.get("profile_photo") or {},
+            "professional_dna_id": professional_dna.get("id"),
+        },
+    )
+    result = get_operations_workflow().onboard_candidate(candidate)
+    return {"status": "created", "entity": "candidate", "id": result["candidate"]["id"]}
+
+
+def _sync_employer_chat_profile_to_crm(user_id: str, profile: dict) -> dict:
+    employer_profile = profile.get("employer") or {}
+    vacancy_profile = profile.get("vacancy") or {}
+    if not any(employer_profile.get(key) for key in ("company_name", "contact_email", "contact_phone")) and not vacancy_profile:
+        return {"status": "not_ready", "entity": "employer"}
+    crm = get_crm_service()
+    employer = Employer(
+        company_name=str(employer_profile.get("company_name") or f"ATLAS Employer {str(user_id)[-4:]}"),
+        contact_email=str(employer_profile.get("contact_email") or f"{_safe_id_fragment(user_id)}@atlas.local"),
+        contact_phone=str(employer_profile.get("contact_phone") or "not_provided"),
+        country_code=_country_code_from_value(employer_profile.get("country") or vacancy_profile.get("country") or "PL"),
+        industry=str(employer_profile.get("industry") or "unknown"),
+        metadata={"source": "public_ai_chat", "source_user_id": user_id, "actor_id": "employer"},
+    )
+    saved_employer = crm.create_employer(employer)
+    if vacancy_profile and not _vacancy_by_source_user_id(user_id):
+        salary = _safe_int(vacancy_profile.get("salary"), 0)
+        vacancy = Vacancy(
+            employer_id=saved_employer.id,
+            title=str(vacancy_profile.get("profession") or "Recruitment request"),
+            country_code=_country_code_from_value(vacancy_profile.get("country") or employer.country_code),
+            profession_code=_profession_code_from_value(vacancy_profile.get("profession") or "general"),
+            salary_min=salary,
+            salary_max=salary,
+            currency="PLN",
+            required_languages=[],
+            required_documents=[],
+            location=vacancy_profile.get("location"),
+            metadata={
+                "source": "public_ai_chat",
+                "source_user_id": user_id,
+                "people_needed": _safe_int(vacancy_profile.get("quantity"), 1),
+                "housing": vacancy_profile.get("housing"),
+                "requirements": _string_list(vacancy_profile.get("requirements")),
+            },
+        )
+        saved_vacancy = get_operations_workflow().publish_vacancy(vacancy)["vacancy"]
+        return {"status": "created", "entity": "employer_vacancy", "id": saved_employer.id, "vacancy_id": saved_vacancy["id"]}
+    return {"status": "created", "entity": "employer", "id": saved_employer.id}
+
+
+def _candidate_by_source_user_id(user_id: str) -> Candidate | None:
+    for candidate in get_crm_service().candidates.list():
+        if candidate.user_id == user_id or candidate.metadata.get("source_user_id") == user_id:
+            return candidate
+    return None
+
+
+def _vacancy_by_source_user_id(user_id: str) -> Vacancy | None:
+    for vacancy in get_crm_service().vacancies.list():
+        if vacancy.metadata.get("source_user_id") == user_id:
+            return vacancy
+    return None
+
+
+def _candidate_profile_has_lead_signal(profile: dict) -> bool:
+    return any(profile.get(key) for key in ("profession", "country", "phone", "phone_number", "email", "documents", "desired_salary"))
+
+
+def _agent_profile_has_lead_signal(profile: dict) -> bool:
+    return any(
+        (
+            profile.get("personal_information", {}).get("full_name"),
+            profile.get("professional_summary"),
+            profile.get("current_location"),
+            profile.get("contact_information", {}).get("phone"),
+            profile.get("contact_information", {}).get("email"),
+            profile.get("work_experience"),
+            profile.get("skills"),
+        )
+    )
+
+
+def _compact_profile_snapshot(profile: dict) -> dict:
+    allowed = {"profession", "country", "languages", "documents", "desired_salary", "ready_from", "current_step", "completed_fields"}
+    return {key: profile.get(key) for key in allowed if profile.get(key)}
+
+
+def _split_full_name(value: object) -> tuple[str, str]:
+    parts = [part for part in str(value or "").strip().split() if part]
+    if not parts:
+        return "ATLAS", "Lead"
+    if len(parts) == 1:
+        return parts[0], "Lead"
+    return parts[0], " ".join(parts[1:])
+
+
+def _country_code_from_value(value: object) -> str:
+    text = str(value or "").strip().upper()
+    aliases = {
+        "POLAND": "PL",
+        "POLSCHA": "PL",
+        "ПОЛЬША": "PL",
+        "ПОЛЬЩА": "PL",
+        "GERMANY": "DE",
+        "ГЕРМАНИЯ": "DE",
+        "НІМЕЧЧИНА": "DE",
+        "UKRAINE": "UA",
+        "УКРАИНА": "UA",
+        "УКРАЇНА": "UA",
+    }
+    if len(text) == 2 and text.isalpha():
+        return text
+    return aliases.get(text, "PL")
+
+
+def _profession_code_from_value(value: object) -> str:
+    text = str(value or "general").strip().lower()
+    aliases = {
+        "welder": "welder",
+        "зварювальник": "welder",
+        "сварщик": "welder",
+        "driver": "driver",
+        "водитель": "driver",
+        "водій": "driver",
+        "electrician": "electrician",
+        "електрик": "electrician",
+    }
+    return aliases.get(text, "".join(char if char.isalnum() else "_" for char in text).strip("_") or "general")
+
+
+def _language_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        result = []
+        for item in value:
+            if isinstance(item, dict):
+                item = item.get("name")
+            if str(item or "").strip():
+                result.append(str(item).strip().lower()[:12])
+        return result
+    return _string_list(value)
+
+
+def _string_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in str(value or "").split(",") if item.strip()]
+
+
+def _safe_int(value: object, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _safe_id_fragment(value: object) -> str:
+    fragment = "".join(char for char in str(value or "lead") if char.isalnum() or char in ("-", "_"))
+    return fragment[:48] or "lead"
 
 
 def _natural_reply(
