@@ -1,0 +1,84 @@
+{
+  "brand": "ATLAS by EWU",
+  "created_at": "2026-07-18",
+  "static_root": "api/static",
+  "requested_public_structure_mapping": {
+    "public/brand": "api/static/brand"
+  },
+  "primary_logo": "api/static/brand/atlas-logo-primary.png",
+  "source_policy": "Original files in api/static/assets are approved sources and must not be modified in-place.",
+  "backup": {
+    "path": "docs/brand/backup/atlas-brand-assets-20260718.zip",
+    "contents": "All api/static/assets/atlas*.* files present during the 2026-07-18 audit."
+  },
+  "approved_assets": [
+    {
+      "role": "primary",
+      "source": "api/static/assets/atlas_brand_primary.png",
+      "alias": "api/static/brand/atlas-logo-primary.png",
+      "dimensions": "1536x1024",
+      "sha256": "FF5DCC32CA717AB5893FA79137AF2DEF9D0374D5BE121A23342F201CE7959213",
+      "notes": "Primary cinematic logo: gold 3D A, Earth, orbit, silver ATLAS, gold by EWU."
+    },
+    {
+      "role": "primary-webp",
+      "source": "api/static/assets/atlas_brand_header_transparent.webp",
+      "alias": "api/static/brand/atlas-logo-primary.webp",
+      "dimensions": "792x792",
+      "sha256": "derived-from-existing-approved-webp",
+      "notes": "Existing optimized transparent variant for web delivery."
+    },
+    {
+      "role": "horizontal",
+      "source": "api/static/assets/atlas_brand_horizontal_transparent.png",
+      "alias": "api/static/brand/atlas-logo-horizontal.png",
+      "dimensions": "244x98",
+      "sha256": "9B272B97C6BB5B350441D8B852049645F6BD0F32B7DE97A896F8B021466FCB3C",
+      "notes": "Approved horizontal/navigation variant."
+    },
+    {
+      "role": "compact",
+      "source": "api/static/assets/atlas_brand_mark.png",
+      "alias": "api/static/brand/atlas-logo-compact.png",
+      "dimensions": "512x512",
+      "sha256": "787750557A18BEDFF4F2F965D3565BC924B641C261076E51781D180405165C6F",
+      "notes": "Approved compact mark for sidebar, mobile header and loading states."
+    },
+    {
+      "role": "symbol",
+      "source": "api/static/assets/atlas_brand_icon.png",
+      "alias": "api/static/brand/atlas-symbol.png",
+      "dimensions": "512x512",
+      "sha256": "F2CAB9385BFE04ECFFBB44A37BDD3734202F1C27C0A6D19A1153BE2AF5212E6C",
+      "notes": "Approved icon/symbol source."
+    },
+    {
+      "role": "dark-background",
+      "source": "api/static/assets/atlas_brand_header_blend.png",
+      "alias": "api/static/brand/atlas-logo-dark.png",
+      "dimensions": "244x98",
+      "sha256": "A349113B37741331CB960B4670559E395D824186B214AEA3F3AAA2B81045AB0E",
+      "notes": "Approved compact header treatment for dark UI contexts."
+    },
+    {
+      "role": "light-background",
+      "source": "api/static/assets/atlas_brand_header_transparent.png",
+      "alias": "api/static/brand/atlas-logo-light.png",
+      "dimensions": "792x792",
+      "sha256": "6AA4B025239B146F4758878AB3B96D1AFEFDD5DAE71C9A193A985C0BB0C35F83",
+      "notes": "Existing transparent logo file registered for light surfaces; no separate monochrome light logo exists."
+    }
+  ],
+  "missing_formats": [
+    "SVG/vector master file",
+    "true monochrome dark logo",
+    "true monochrome light logo",
+    "favicon .ico generated from approved source"
+  ],
+  "audited_color_families": {
+    "dark": ["#05070d", "#001020", "#000010", "#000020", "#0b1324"],
+    "blue": ["#002050", "#003070", "#004090", "#0060c0"],
+    "gold": ["#a06010", "#b06010", "#d6b25e", "#ffc040", "#f0d58b"],
+    "silver": ["#a0a0a0", "#d0d0d0", "#eef1f6", "#ffffff"]
+  }
+}

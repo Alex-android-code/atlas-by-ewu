@@ -1,5 +1,11 @@
 """ATLAS by EWU brand logo component."""
 
+BRAND_ASSET_VERSION = "20260718-brand-system"
+BRAND_LOGO_PRIMARY = f"/static/brand/atlas-logo-primary.png?v={BRAND_ASSET_VERSION}"
+BRAND_LOGO_PRIMARY_WEBP = f"/static/brand/atlas-logo-primary.webp?v={BRAND_ASSET_VERSION}"
+BRAND_LOGO_COMPACT = f"/static/brand/atlas-logo-compact.png?v={BRAND_ASSET_VERSION}"
+BRAND_LOGO_COMPACT_WEBP = f"/static/brand/atlas-logo-compact.webp?v={BRAND_ASSET_VERSION}"
+
 
 BRAND_LOGO_CSS = """
 .brand-logo {
@@ -35,22 +41,22 @@ BRAND_LOGO_CSS = """
 """
 
 
-BRAND_LOGO_HTML = """
+BRAND_LOGO_HTML = f"""
 <a class="brand-logo" href="/" aria-label="ATLAS by EWU">
   <picture class="brand-logo-picture">
-    <source srcset="/static/assets/atlas_brand_header_transparent.webp?v=20260714-premium-logo" type="image/webp" />
-    <img class="brand-logo-image" src="/static/assets/atlas_brand_header_transparent.png?v=20260714-premium-logo" alt="ATLAS by EWU" />
+    <source srcset="{BRAND_LOGO_PRIMARY_WEBP}" type="image/webp" />
+    <img class="brand-logo-image" src="{BRAND_LOGO_PRIMARY}" alt="ATLAS by EWU" />
   </picture>
   <span class="brand-logo-caption" data-i18n="brand.caption">Connecting talent. Building futures.</span>
 </a>
 """
 
 
-BRAND_MARK_HTML = """
+BRAND_MARK_HTML = f"""
 <a class="brand-mark" href="/" aria-label="ATLAS by EWU">
   <picture>
-    <source srcset="/static/assets/atlas_brand_mark.webp?v=20260714-premium-mark" type="image/webp" />
-    <img class="brand-mark-image" src="/static/assets/atlas_brand_mark.png?v=20260714-premium-mark" alt="ATLAS by EWU" />
+    <source srcset="{BRAND_LOGO_COMPACT_WEBP}" type="image/webp" />
+    <img class="brand-mark-image" src="{BRAND_LOGO_COMPACT}" alt="ATLAS by EWU" />
   </picture>
   <span class="brand-mark-text">
     <span class="brand-mark-name">ATLAS</span>
