@@ -21,6 +21,7 @@ from core.models import (
     DevelopmentPlan,
     DevelopmentPlanStep,
     Document,
+    DynamicInterviewSession,
     Employer,
     EmployerCompetencyRequirement,
     Match,
@@ -252,3 +253,8 @@ class WorkforceCompetencyGapRepository(JsonRepository[WorkforceCompetencyGap]):
 class UpskillingOpportunityRepository(JsonRepository[UpskillingOpportunity]):
     collection = "upskilling_opportunities"
     model_class = UpskillingOpportunity
+
+
+class DynamicInterviewSessionRepository(JsonRepository[DynamicInterviewSession]):
+    collection = "dynamic_interview_sessions"
+    model_class = DynamicInterviewSession

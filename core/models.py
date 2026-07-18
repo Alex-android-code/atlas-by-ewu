@@ -481,6 +481,23 @@ class UpskillingOpportunity(SerializableModel):
 
 
 @dataclass
+class DynamicInterviewSession(SerializableModel):
+    user_id: str
+    role: str = "candidate"
+    language: str = "en"
+    status: str = "active"
+    current_field: str | None = None
+    completed_fields: list[str] = field(default_factory=list)
+    profile_data: dict[str, Any] = field(default_factory=dict)
+    contradictions: list[dict[str, Any]] = field(default_factory=list)
+    history: list[dict[str, Any]] = field(default_factory=list)
+    id: str = field(default_factory=lambda: new_id("DIN"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"

@@ -147,6 +147,17 @@ class DevelopmentPlanCreate(BaseModel):
     skill_gap_ids: list[str] = Field(default_factory=list)
 
 
+class DynamicInterviewStart(BaseModel):
+    user_id: str
+    role: str = "candidate"
+    language: str = "en"
+
+
+class DynamicInterviewAnswer(BaseModel):
+    session_id: str
+    answer: str = Field(min_length=1, max_length=4000)
+
+
 class AgentOnboardingAnswer(BaseModel):
     user_id: str
     field: str

@@ -17,6 +17,7 @@ from database.repositories import (
     DevelopmentPlanRepository,
     DevelopmentPlanStepRepository,
     DocumentRepository,
+    DynamicInterviewSessionRepository,
     EmployerRepository,
     EmployerCompetencyRequirementRepository,
     MatchRepository,
@@ -33,6 +34,7 @@ from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
+from services.dynamic_interview import DynamicInterviewService
 from services.rodo_service import RodoService
 from workflows.operations_workflow import OperationsWorkflow
 
@@ -103,4 +105,11 @@ def get_competency_intelligence_service() -> CompetencyIntelligenceService:
             development_plans=DevelopmentPlanRepository(database),
             development_plan_steps=DevelopmentPlanStepRepository(database),
         )
+    )
+
+
+def get_dynamic_interview_service() -> DynamicInterviewService:
+    return DynamicInterviewService(
+        sessions=DynamicInterviewSessionRepository(get_database()),
+        competency_service=get_competency_intelligence_service(),
     )
