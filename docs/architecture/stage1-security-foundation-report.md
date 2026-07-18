@@ -56,6 +56,10 @@ Status: in progress. This report covers the first security fixes implemented aft
    - Public request intake for export/delete/rectification/restriction.
    - Admin-only request list, status update, and subject data export.
 
+12. Added MVP storage hardening and backup foundation.
+   - JSON writes now use locking plus atomic file replacement.
+   - Added sanitized data backup script with manifest and checksums.
+
 ## Required Environment Variables
 
 Production should define one of these:
@@ -95,8 +99,8 @@ Result:
 
 - Add CSRF protection for dashboard mutations.
 - Add failed-login audit events.
-- Move JSON storage to PostgreSQL or add interim file locking.
+- Move JSON storage to PostgreSQL.
 - Connect RODO consent prompts into Telegram and web UX.
 - Add verified destructive deletion workflow.
-- Add backup automation for Render persistent disk.
+- Add scheduled encrypted backup automation for Render persistent disk.
 - Add dependency and secret scanning in CI.
