@@ -109,6 +109,8 @@ _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
 AI_MESSAGE_LIMIT_PER_MINUTE = 20
 _ADMIN_SESSIONS: dict[str, float] = {}
 ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60
+_ADMIN_LOGIN_ATTEMPTS: dict[str, list[float]] = {}
+ADMIN_LOGIN_LIMIT_PER_MINUTE = 5
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -180,6 +182,8 @@ def dashboard(request: Request) -> str:
 
 @app.post("/api/login")
 def api_login(payload: LoginRequest, request: Request, response: Response) -> dict[str, str]:
+    client_id = request.client.host if request.client else "unknown"
+    _enforce_admin_login_rate_limit(client_id)
     if not _valid_admin_password(payload.password):
         raise HTTPException(status_code=401, detail="Invalid access code")
     session_id = secrets.token_urlsafe(32)
@@ -193,6 +197,15 @@ def api_login(payload: LoginRequest, request: Request, response: Response) -> di
         max_age=ADMIN_SESSION_TTL_SECONDS,
     )
     return {"status": "ok", "role": "admin"}
+
+
+@app.post("/api/logout")
+def api_logout(request: Request, response: Response) -> dict[str, str]:
+    session_id = request.cookies.get("atlas_session")
+    if session_id:
+        _ADMIN_SESSIONS.pop(session_id, None)
+    response.delete_cookie("atlas_session")
+    return {"status": "ok"}
 
 
 @app.get("/api/health")
@@ -545,12 +558,12 @@ def update_candidate_status(candidate_id: str, payload: StatusUpdate, request: R
 @app.patch("/api/candidates/{candidate_id}/documents-received")
 def mark_candidate_documents_received(candidate_id: str, request: Request, payload: StatusUpdate | None = None) -> dict:
     _require_admin(request)
-    request = payload or StatusUpdate(status="ready_for_matching", note="Documents received")
+    status_update = payload or StatusUpdate(status="ready_for_matching", note="Documents received")
     try:
         candidate = get_crm_service().mark_candidate_documents_received(
             candidate_id,
-            actor_id=request.actor_id,
-            note=request.note or "Documents received",
+            actor_id=status_update.actor_id,
+            note=status_update.note or "Documents received",
         )
         return {"candidate": candidate.to_dict()}
     except ValueError as error:
@@ -581,13 +594,13 @@ def create_employer(payload: EmployerCreate, request: Request) -> dict:
 @app.patch("/api/employers/{employer_id}/verify")
 def verify_employer(employer_id: str, request: Request, payload: VerificationUpdate | None = None) -> dict:
     _require_admin(request)
-    request = payload or VerificationUpdate()
+    verification = payload or VerificationUpdate()
     try:
         employer = get_crm_service().set_employer_verified(
             employer_id,
-            verified=request.verified,
-            actor_id=request.actor_id,
-            note=request.note,
+            verified=verification.verified,
+            actor_id=verification.actor_id,
+            note=verification.note,
         )
         return {"employer": employer.to_dict()}
     except ValueError as error:
@@ -645,11 +658,11 @@ def publish_vacancy(vacancy_id: str, request: Request) -> dict:
 @app.post("/api/vacancies/{vacancy_id}/match")
 def match_vacancy(vacancy_id: str, request: Request, payload: MatchRequest | None = None) -> dict:
     _require_admin(request)
-    request = payload or MatchRequest()
+    match_request = payload or MatchRequest()
     try:
         return get_operations_workflow().run_matching_for_vacancy(
             vacancy_id,
-            minimum_score=request.minimum_score,
+            minimum_score=match_request.minimum_score,
         )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -688,6 +701,16 @@ def _valid_admin_password(password: str) -> bool:
         return True
     configured_password = os.getenv("ATLAS_ADMIN_PASSWORD", "").strip() or os.getenv("ATLAS_ADMIN_TOKEN", "").strip()
     return bool(configured_password and secrets.compare_digest(password, configured_password))
+
+
+def _enforce_admin_login_rate_limit(client_id: str) -> None:
+    now = time()
+    recent = [timestamp for timestamp in _ADMIN_LOGIN_ATTEMPTS.get(client_id, []) if now - timestamp < 60]
+    if len(recent) >= ADMIN_LOGIN_LIMIT_PER_MINUTE:
+        _ADMIN_LOGIN_ATTEMPTS[client_id] = recent
+        raise HTTPException(status_code=429, detail="Too many login attempts")
+    recent.append(now)
+    _ADMIN_LOGIN_ATTEMPTS[client_id] = recent
 
 
 def _verify_pbkdf2_sha256(password: str, encoded_hash: str) -> bool:

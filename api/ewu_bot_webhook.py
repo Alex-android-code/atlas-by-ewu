@@ -9,6 +9,7 @@ from functools import lru_cache
 from fastapi import APIRouter, Header, HTTPException, Request
 
 router = APIRouter()
+MAX_WEBHOOK_BODY_BYTES = int(os.getenv("EWU_BOT_MAX_WEBHOOK_BODY_BYTES", str(1024 * 1024)))
 
 
 @lru_cache(maxsize=1)
@@ -57,7 +58,22 @@ async def ewu_bot_webhook(
         raise HTTPException(status_code=403, detail="Invalid Telegram webhook secret")
 
     module = _bot_module()
-    body = await request.body()
+    body = await _read_webhook_body(request)
     update = module.telebot.types.Update.de_json(body.decode("utf-8"))
     module.bot.process_new_updates([update])
     return {"status": "ok"}
+
+
+async def _read_webhook_body(request: Request) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_WEBHOOK_BODY_BYTES:
+                raise HTTPException(status_code=413, detail="Telegram webhook payload is too large")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid content length") from None
+
+    body = await request.body()
+    if len(body) > MAX_WEBHOOK_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Telegram webhook payload is too large")
+    return body

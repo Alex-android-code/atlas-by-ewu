@@ -2,7 +2,7 @@
 
 Date: 2026-07-18
 
-Status: started. This report covers the first security fixes implemented after the Stage 0 current-state audit.
+Status: in progress. This report covers the first security fixes implemented after the Stage 0 current-state audit.
 
 ## Implemented
 
@@ -34,6 +34,20 @@ Status: started. This report covers the first security fixes implemented after t
 
 6. Added tests for admin security behavior.
    - `tests/test_admin_security.py`
+
+7. Added admin login rate limiting.
+   - Repeated login attempts from the same client are limited.
+   - Excess attempts return HTTP `429`.
+
+8. Added admin logout endpoint.
+   - `/api/logout` clears the server-side admin session and browser cookie.
+
+9. Added Telegram webhook body-size protection.
+   - Oversized webhook payloads return HTTP `413`.
+   - Invalid `content-length` returns HTTP `400`.
+
+10. Added tests for Telegram webhook payload limits.
+   - `tests/test_ewu_bot_webhook_security.py`
 
 ## Required Environment Variables
 
@@ -67,15 +81,14 @@ py -3.12 -m unittest discover -s tests
 Result:
 
 - New admin security tests: passed.
+- New EWU bot webhook security tests: passed.
 - Full existing unittest suite: passed.
 
 ## Remaining Security Work
 
 - Add CSRF protection for dashboard mutations.
-- Add login rate limiting and failed-login audit events.
-- Add request body size limit for Telegram webhook.
+- Add failed-login audit events.
 - Move JSON storage to PostgreSQL or add interim file locking.
 - Add RODO consent/export/delete workflows.
 - Add backup automation for Render persistent disk.
 - Add dependency and secret scanning in CI.
-
