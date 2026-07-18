@@ -571,7 +571,7 @@ def ai_message(payload: AIMessageRequest, request: Request) -> dict:
         "confidence": ai_response.get("confidence", 0.0),
         "provider": metadata.get("provider"),
         "model": metadata.get("model"),
-        "fallback_used": metadata.get("source") != "model",
+        "fallback_used": bool(metadata.get("fallback_used", metadata.get("source") != "model")),
         "request_id": metadata.get("request_id"),
     }
 
