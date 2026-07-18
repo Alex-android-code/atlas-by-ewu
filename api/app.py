@@ -1,6 +1,8 @@
 """FastAPI application for ATLAS/EWU."""
 
 import os
+import hashlib
+import secrets
 from pathlib import Path
 from time import time
 
@@ -105,6 +107,8 @@ def startup_configure_ewu_bot_webhook() -> None:
 
 _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
 AI_MESSAGE_LIMIT_PER_MINUTE = 20
+_ADMIN_SESSIONS: dict[str, float] = {}
+ADMIN_SESSION_TTL_SECONDS = 8 * 60 * 60
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -169,16 +173,25 @@ def login() -> str:
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request) -> str:
-    if request.cookies.get("atlas_role") not in {"owner", "admin", "coordinator"}:
+    if not _is_admin_authorized(request):
         return LOGIN_HTML
     return DASHBOARD_HTML
 
 
 @app.post("/api/login")
-def api_login(payload: LoginRequest, response: Response) -> dict[str, str]:
-    if payload.password != "atlas":
+def api_login(payload: LoginRequest, request: Request, response: Response) -> dict[str, str]:
+    if not _valid_admin_password(payload.password):
         raise HTTPException(status_code=401, detail="Invalid access code")
-    response.set_cookie("atlas_role", "admin", httponly=True, samesite="lax")
+    session_id = secrets.token_urlsafe(32)
+    _ADMIN_SESSIONS[session_id] = time() + ADMIN_SESSION_TTL_SECONDS
+    response.set_cookie(
+        "atlas_session",
+        session_id,
+        httponly=True,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=ADMIN_SESSION_TTL_SECONDS,
+    )
     return {"status": "ok", "role": "admin"}
 
 
@@ -459,7 +472,8 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
 
 
 @app.get("/api/dashboard")
-def get_dashboard() -> dict:
+def get_dashboard(request: Request) -> dict:
+    _require_admin(request)
     return get_crm_service().coordinator_dashboard()
 
 
@@ -502,7 +516,8 @@ def get_first_vacancies_report(request: Request, limit: int = 5) -> list[dict]:
 
 
 @app.get("/api/candidates")
-def list_candidates() -> list[dict]:
+def list_candidates(request: Request) -> list[dict]:
+    _require_admin(request)
     return [candidate.to_dict() for candidate in get_crm_service().candidates.list()]
 
 
@@ -513,7 +528,8 @@ def create_candidate(payload: CandidateCreate) -> dict:
 
 
 @app.patch("/api/candidates/{candidate_id}/status")
-def update_candidate_status(candidate_id: str, payload: StatusUpdate) -> dict:
+def update_candidate_status(candidate_id: str, payload: StatusUpdate, request: Request) -> dict:
+    _require_admin(request)
     try:
         candidate = get_crm_service().update_candidate_status(
             candidate_id,
@@ -527,7 +543,8 @@ def update_candidate_status(candidate_id: str, payload: StatusUpdate) -> dict:
 
 
 @app.patch("/api/candidates/{candidate_id}/documents-received")
-def mark_candidate_documents_received(candidate_id: str, payload: StatusUpdate | None = None) -> dict:
+def mark_candidate_documents_received(candidate_id: str, request: Request, payload: StatusUpdate | None = None) -> dict:
+    _require_admin(request)
     request = payload or StatusUpdate(status="ready_for_matching", note="Documents received")
     try:
         candidate = get_crm_service().mark_candidate_documents_received(
@@ -541,7 +558,8 @@ def mark_candidate_documents_received(candidate_id: str, payload: StatusUpdate |
 
 
 @app.get("/api/employers")
-def list_employers() -> list[dict]:
+def list_employers(request: Request) -> list[dict]:
+    _require_admin(request)
     return [employer.to_dict() for employer in get_crm_service().employers.list()]
 
 
@@ -561,7 +579,8 @@ def create_employer(payload: EmployerCreate, request: Request) -> dict:
 
 
 @app.patch("/api/employers/{employer_id}/verify")
-def verify_employer(employer_id: str, payload: VerificationUpdate | None = None) -> dict:
+def verify_employer(employer_id: str, request: Request, payload: VerificationUpdate | None = None) -> dict:
+    _require_admin(request)
     request = payload or VerificationUpdate()
     try:
         employer = get_crm_service().set_employer_verified(
@@ -576,7 +595,8 @@ def verify_employer(employer_id: str, payload: VerificationUpdate | None = None)
 
 
 @app.get("/api/vacancies")
-def list_vacancies() -> list[dict]:
+def list_vacancies(request: Request) -> list[dict]:
+    _require_admin(request)
     return [vacancy.to_dict() for vacancy in get_crm_service().vacancies.list()]
 
 
@@ -587,7 +607,8 @@ def create_vacancy(payload: VacancyCreate) -> dict:
 
 
 @app.patch("/api/vacancies/{vacancy_id}/status")
-def update_vacancy_status(vacancy_id: str, payload: StatusUpdate) -> dict:
+def update_vacancy_status(vacancy_id: str, payload: StatusUpdate, request: Request) -> dict:
+    _require_admin(request)
     try:
         vacancy = get_crm_service().update_vacancy_status(
             vacancy_id,
@@ -622,7 +643,8 @@ def publish_vacancy(vacancy_id: str, request: Request) -> dict:
 
 
 @app.post("/api/vacancies/{vacancy_id}/match")
-def match_vacancy(vacancy_id: str, payload: MatchRequest | None = None) -> dict:
+def match_vacancy(vacancy_id: str, request: Request, payload: MatchRequest | None = None) -> dict:
+    _require_admin(request)
     request = payload or MatchRequest()
     try:
         return get_operations_workflow().run_matching_for_vacancy(
@@ -634,12 +656,14 @@ def match_vacancy(vacancy_id: str, payload: MatchRequest | None = None) -> dict:
 
 
 @app.get("/api/matches")
-def list_matches() -> list[dict]:
+def list_matches(request: Request) -> list[dict]:
+    _require_admin(request)
     return [match.to_dict() for match in get_crm_service().matches.list()]
 
 
 @app.patch("/api/matches/{match_id}/status")
-def update_match_status(match_id: str, payload: StatusUpdate) -> dict:
+def update_match_status(match_id: str, payload: StatusUpdate, request: Request) -> dict:
+    _require_admin(request)
     try:
         match = get_crm_service().update_match_status(
             match_id,
@@ -653,17 +677,51 @@ def update_match_status(match_id: str, payload: StatusUpdate) -> dict:
 
 
 @app.get("/api/activity")
-def list_activity(limit: int = 50) -> list[dict]:
+def list_activity(request: Request, limit: int = 50) -> list[dict]:
+    _require_admin(request)
     return [event.to_dict() for event in get_crm_service().list_activity(limit=limit)]
 
 
-def _require_admin(request: Request) -> None:
-    role = request.cookies.get("atlas_role")
+def _valid_admin_password(password: str) -> bool:
+    password_hash = os.getenv("ATLAS_ADMIN_PASSWORD_HASH", "").strip()
+    if password_hash and _verify_pbkdf2_sha256(password, password_hash):
+        return True
+    configured_password = os.getenv("ATLAS_ADMIN_PASSWORD", "").strip() or os.getenv("ATLAS_ADMIN_TOKEN", "").strip()
+    return bool(configured_password and secrets.compare_digest(password, configured_password))
+
+
+def _verify_pbkdf2_sha256(password: str, encoded_hash: str) -> bool:
+    try:
+        algorithm, iterations, salt, expected = encoded_hash.split("$", 3)
+        if algorithm != "pbkdf2_sha256":
+            return False
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), int(iterations))
+        return secrets.compare_digest(digest.hex(), expected)
+    except (TypeError, ValueError):
+        return False
+
+
+def _is_admin_authorized(request: Request) -> bool:
+    _expire_admin_sessions()
+    session_id = request.cookies.get("atlas_session")
+    if session_id and _ADMIN_SESSIONS.get(session_id, 0) > time():
+        return True
     token = request.headers.get("x-atlas-admin-token")
     expected_token = os.getenv("ATLAS_ADMIN_TOKEN")
-    if role in {"owner", "admin"}:
-        return
-    if expected_token and token == expected_token:
+    if expected_token and token and secrets.compare_digest(token, expected_token):
+        return True
+    return False
+
+
+def _expire_admin_sessions() -> None:
+    now = time()
+    expired = [session_id for session_id, expires_at in _ADMIN_SESSIONS.items() if expires_at <= now]
+    for session_id in expired:
+        _ADMIN_SESSIONS.pop(session_id, None)
+
+
+def _require_admin(request: Request) -> None:
+    if _is_admin_authorized(request):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
 
