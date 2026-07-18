@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from config import EWU_DATA_DIR, GOOGLE_SCRIPT_URL, LOCAL_BACKUP_FILE
+from .config import EWU_DATA_DIR, GOOGLE_SCRIPT_URL, LOCAL_BACKUP_FILE
 
 
 def now_iso():

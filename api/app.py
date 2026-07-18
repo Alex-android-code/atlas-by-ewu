@@ -14,6 +14,7 @@ from api.chat import AI_CHAT_HTML
 from api.dashboard import DASHBOARD_HTML
 from api.dependencies import get_agent_profile_service, get_crm_service, get_operations_workflow
 from api.employer import EMPLOYER_HTML
+from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
 from api.landing import LANDING_HTML
 from api.login import LOGIN_HTML
 from api.schemas import (
@@ -95,6 +96,12 @@ app.mount(
     StaticFiles(directory=Path(__file__).resolve().parent / "static"),
     name="static",
 )
+app.include_router(ewu_bot_router)
+
+
+@app.on_event("startup")
+def startup_configure_ewu_bot_webhook() -> None:
+    configure_ewu_bot_webhook()
 
 _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
 AI_MESSAGE_LIMIT_PER_MINUTE = 20

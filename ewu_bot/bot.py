@@ -10,18 +10,18 @@ import telebot
 from telebot import apihelper
 from telebot import types
 
-from ai import ai_next_turn, ai_reply, ai_summary
-from config import ADMIN_CHAT_ID, BANNER_FILE, DEFAULT_LANG, EWU_DATA_DIR, TELEGRAM_TOKEN
-from crm import ensure_dirs, load_backups, log_error, send_crm, update_status
-from ewu_id import new_candidate_id, new_case_id, new_employer_id
-from extractor import extract
-from i18n import t
-from keyboards import admin_keyboard, contact_keyboard, lang_keyboard, role_keyboard, yes_no_keyboard
-from language_detect import detect_lang, normalize_lang
-from learning import save_feedback, save_learning_note
-from notifier import leads, operations
-from pdf_card import make_candidate_pdf, make_vacancy_pdf
-import qualification
+from .ai import ai_next_turn, ai_reply, ai_summary
+from .config import ADMIN_CHAT_ID, BANNER_FILE, DEFAULT_LANG, EWU_DATA_DIR, TELEGRAM_TOKEN
+from .crm import ensure_dirs, load_backups, log_error, send_crm, update_status
+from .ewu_id import new_candidate_id, new_case_id, new_employer_id
+from .extractor import extract
+from .i18n import t
+from .keyboards import admin_keyboard, contact_keyboard, lang_keyboard, role_keyboard, yes_no_keyboard
+from .language_detect import detect_lang, normalize_lang
+from .learning import save_feedback, save_learning_note
+from .notifier import leads, operations
+from .pdf_card import make_candidate_pdf, make_vacancy_pdf
+from . import qualification
 
 
 if not TELEGRAM_TOKEN:

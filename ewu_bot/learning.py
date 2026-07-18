@@ -2,8 +2,8 @@ import json
 import os
 from datetime import datetime, timezone
 
-from config import EWU_DATA_DIR
-from crm import ensure_dirs, log_error
+from .config import EWU_DATA_DIR
+from .crm import ensure_dirs, log_error
 
 
 def _learning_dir():

@@ -28,20 +28,6 @@ services:
         sync: false
       - key: ATLAS_ADMIN_TOKEN
         sync: false
-  - type: worker
-    name: ewu-bot
-    runtime: python
-    plan: free
-    region: frankfurt
-    buildCommand: cd ewu_bot && pip install -r requirements.txt
-    startCommand: cd ewu_bot && python bot.py
-    disk:
-      name: ewu-bot-data
-      mountPath: /var/data/ewu_bot
-      sizeGB: 1
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.12.8
       - key: EWU_DATA_DIR
         value: /var/data/ewu_bot
       - key: LOCAL_BACKUP_FILE
@@ -58,8 +44,6 @@ services:
         value: assets/ewu_logo.png
       - key: TELEGRAM_TOKEN
         sync: false
-      - key: GEMINI_API_KEY
-        sync: false
       - key: GOOGLE_SCRIPT_URL
         sync: false
       - key: OPERATIONS_CHAT_ID
@@ -67,4 +51,8 @@ services:
       - key: LEADS_CHANNEL_ID
         sync: false
       - key: ADMIN_CHAT_ID
+        sync: false
+      - key: EWU_BOT_WEBHOOK_URL
+        value: https://atlas-by-ewu.onrender.com/api/ewu-bot/webhook
+      - key: EWU_BOT_WEBHOOK_SECRET
         sync: false

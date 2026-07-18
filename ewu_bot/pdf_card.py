@@ -11,7 +11,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Image as RLImage
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from config import LOGO_FILE, PDF_DIR
+from .config import LOGO_FILE, PDF_DIR
 
 
 FONT = "Helvetica"

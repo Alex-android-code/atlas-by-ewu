@@ -1,9 +1,9 @@
 import os
 import time
 
-from config import LEADS_CHANNEL_ID, OPERATIONS_CHAT_ID
-from crm import log_error
-from keyboards import status_keyboard
+from .config import LEADS_CHANNEL_ID, OPERATIONS_CHAT_ID
+from .crm import log_error
+from .keyboards import status_keyboard
 
 
 def _send_with_retry(fn, source):

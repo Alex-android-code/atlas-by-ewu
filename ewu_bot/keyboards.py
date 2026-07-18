@@ -1,5 +1,5 @@
 from telebot import types
-from i18n import t
+from .i18n import t
 
 
 MAIN_MENU = [
