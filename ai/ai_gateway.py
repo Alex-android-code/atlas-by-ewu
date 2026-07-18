@@ -252,7 +252,7 @@ class MultiModelGateway:
 
         system_prompt = build_system_prompt(role=role, task_type=task_type)
         result, fallback_used = await self._call_with_fallbacks(
-            routing.fallback_order[: self.max_retries + 1],
+            routing.fallback_order,
             system_prompt=system_prompt,
             user_message=clean_message,
             context=safe_context,
@@ -396,11 +396,20 @@ class MultiModelGateway:
     ) -> tuple[ModelResult | None, bool]:
         errors: list[dict[str, str]] = []
         attempted: set[str] = set()
+        model_attempts = 0
         for provider_name in fallback_order:
             if provider_name in attempted or provider_name not in self.registry.available():
                 continue
             attempted.add(provider_name)
+            provider = self.registry.get(provider_name)
+            health = provider.health()
+            if health.get("status") == "degraded" and health.get("error_type") == "not_configured":
+                errors.append({"provider": provider_name, "error_type": "not_configured"})
+                continue
+            if provider_name != "mock" and model_attempts >= self.max_retries + 1:
+                continue
             try:
+                model_attempts += 1
                 result = await self.call_model(
                     provider_name=provider_name,
                     system_prompt=system_prompt,
