@@ -117,6 +117,10 @@ CONTROL_CENTER_HTML = """
     .brief-card span, .record span, .stage span { display: block; margin-top: 4px; color: var(--cc-muted); font-size: 12px; }
     .actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .action-button { min-height: 46px; }
+    .action-button:disabled {
+      cursor: progress;
+      opacity: 0.68;
+    }
     .kanban { grid-template-columns: repeat(4, minmax(120px, 1fr)); overflow-x: auto; }
     .stage { min-height: 86px; }
     .stage b { color: var(--cc-gold); font-size: 24px; }
@@ -157,20 +161,20 @@ CONTROL_CENTER_HTML = """
         <div class="actions" id="quick-actions"></div>
       </section>
       <section class="grid">
-        <div class="panel">
+        <div class="panel" id="daily-brief-panel">
           <div class="panel-head"><h2>AI Daily Brief</h2><span class="hint" id="events-count"></span></div>
           <div class="brief" id="daily-brief"></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="intelligence-panel">
           <div class="panel-head"><h2>Intelligence View</h2><span class="hint">Grouped signals</span></div>
           <div class="brief" id="intelligence"></div>
         </div>
       </section>
-      <section class="panel">
+      <section class="panel" id="candidate-pipeline-panel">
         <div class="panel-head"><h2>Candidate Pipeline</h2><span class="hint">Centralized status config</span></div>
         <div class="kanban" id="candidate-kanban"></div>
       </section>
-      <section class="panel">
+      <section class="panel" id="records-panel">
         <div class="panel-head"><h2>CRM Workspace</h2><span class="hint">Latest candidate records</span></div>
         <div class="records" id="records"></div>
       </section>
@@ -180,6 +184,7 @@ CONTROL_CENTER_HTML = """
   {{OBSERVABILITY_BODY}}
   <script>
     let role = "admin";
+    let workspace = null;
     const $ = (id) => document.getElementById(id);
     const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
@@ -193,19 +198,43 @@ CONTROL_CENTER_HTML = """
         return;
       }
       const data = await response.json();
+      workspace = data;
       render(data);
       $("status").textContent = "Workspace updated.";
+    }
+
+    async function postJson(url, payload = {}) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Request failed");
+      return data;
+    }
+
+    function scrollToPanel(panelId, message) {
+      const panel = $(panelId);
+      if (panel) panel.scrollIntoView({behavior: "smooth", block: "start"});
+      $("status").textContent = message;
     }
 
     function render(data) {
       $("brief-lead").textContent = data.daily_brief.summary;
       $("events-count").textContent = `${data.daily_brief.events_analyzed} events analyzed`;
       $("nav").innerHTML = data.navigation.map((item, index) =>
-        `<button type="button" class="${index === 0 ? "active" : ""}">${escapeHtml(item.label)}</button>`
+        `<button type="button" data-nav-code="${escapeHtml(item.code)}" class="${index === 0 ? "active" : ""}">${escapeHtml(item.label)}</button>`
       ).join("");
       $("quick-actions").innerHTML = data.quick_actions.map((item, index) =>
-        `<button type="button" class="action-button ${index === 0 ? "primary" : ""}">${escapeHtml(item.label)}</button>`
+        `<button type="button" class="action-button ${index === 0 ? "primary" : ""}" data-action-code="${escapeHtml(item.code)}">${escapeHtml(item.label)}</button>`
       ).join("");
+      document.querySelectorAll("[data-nav-code]").forEach((button) => {
+        button.addEventListener("click", () => activateNavigation(button));
+      });
+      document.querySelectorAll("[data-action-code]").forEach((button) => {
+        button.addEventListener("click", () => runQuickAction(button.dataset.actionCode, button));
+      });
       const recommendations = data.daily_brief.recommendations || [];
       $("daily-brief").innerHTML = recommendations.length
         ? recommendations.map(item => `<div class="brief-card"><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.reason)} Source: ${escapeHtml(item.source)}. Expected: ${escapeHtml(item.expected_result)}</span></div>`).join("")
@@ -220,6 +249,108 @@ CONTROL_CENTER_HTML = """
       $("records").innerHTML = candidates.slice(-12).reverse().map(candidate =>
         `<div class="record"><strong>${escapeHtml(candidate.first_name)} ${escapeHtml(candidate.last_name)}</strong><span>${escapeHtml(candidate.profession_code)} · ${escapeHtml(candidate.status)} · ${escapeHtml(candidate.phone)}</span></div>`
       ).join("") || `<div class="record"><strong>No candidates yet</strong><span>New applications will appear here automatically.</span></div>`;
+    }
+
+    function activateNavigation(button) {
+      document.querySelectorAll("[data-nav-code]").forEach((item) => item.classList.remove("active"));
+      button.classList.add("active");
+      const code = button.dataset.navCode || "";
+      const routes = {
+        home: ["/"],
+        ai_agent: ["/agent/dashboard"],
+        opportunities: ["/ai?intent=job"],
+        profile: ["/agent/dashboard"],
+        overview: ["daily-brief-panel", "Overview opened."],
+        command_center: ["daily-brief-panel", "Command Center opened."],
+        crm: ["records-panel", "CRM workspace opened."],
+        crm_workspace: ["records-panel", "CRM workspace opened."],
+        candidates: ["records-panel", "Candidate records opened."],
+        companies: ["records-panel", "Company records opened."],
+        vacancies: ["records-panel", "Vacancy records opened."],
+        deals: ["candidate-pipeline-panel", "Deals and matching pipeline opened."],
+        candidate_pipeline: ["candidate-pipeline-panel", "Candidate pipeline opened."],
+        matching: ["candidate-pipeline-panel", "Matching pipeline opened."],
+        recruitment: ["candidate-pipeline-panel", "Recruitment pipeline opened."],
+        workforce: ["intelligence-panel", "Workforce intelligence opened."],
+        analytics: ["intelligence-panel", "Analytics signals opened."],
+        documents: ["intelligence-panel", "Document signals opened."],
+        risks: ["intelligence-panel", "Risk signals opened."],
+        audit: ["daily-brief-panel", "Audit overview opened."],
+        support: ["daily-brief-panel", "Support queue opened."],
+        learning: ["/agent/dashboard"],
+        career: ["/agent/dashboard"],
+        company: ["/employer"],
+        billing: ["daily-brief-panel", "Billing module selected."],
+        partners: ["daily-brief-panel", "Partners module selected."],
+        finance: ["daily-brief-panel", "Finance module selected."],
+        settings: ["daily-brief-panel", "Settings module selected."],
+        ai_advisor: ["/employer"],
+        intelligence: ["intelligence-panel", "Intelligence view opened."],
+        ai_control: ["daily-brief-panel", "AI daily brief opened."],
+        control_center: ["daily-brief-panel", "Control Center overview opened."]
+      };
+      const route = routes[code] || ["daily-brief-panel", `${button.textContent} opened.`];
+      if (route[0].startsWith("/")) {
+        window.location.href = route[0];
+        return;
+      }
+      scrollToPanel(route[0], route[1]);
+    }
+
+    async function runQuickAction(code, button) {
+      const originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = "Working...";
+      try {
+        if (code === "open_crm") {
+          window.location.href = "/dashboard";
+          return;
+        }
+        if (code === "open_ai_control" || code === "update_profile") {
+          window.location.href = "/agent/dashboard";
+          return;
+        }
+        if (code === "create_vacancy") {
+          window.location.href = "/dashboard";
+          return;
+        }
+        if (code === "find_opportunities") {
+          window.location.href = "/ai?intent=job";
+          return;
+        }
+        if (code === "check_documents" || code === "review_risks") {
+          scrollToPanel("intelligence-panel", "Risk and document signals opened.");
+          return;
+        }
+        if (code === "find_learning" || code === "analyze_workforce" || code === "request_report") {
+          scrollToPanel("daily-brief-panel", "This module is visible here; full workflow will be enabled in the next backend step.");
+          return;
+        }
+        if (code === "find_people" || code === "run_matching") {
+          await runMatchingFromControlCenter();
+          return;
+        }
+        scrollToPanel("daily-brief-panel", `${originalText} selected.`);
+      } catch (error) {
+        $("status").textContent = error.message || "Action failed.";
+      } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    async function runMatchingFromControlCenter() {
+      const vacancies = workspace?.table_view?.vacancies || [];
+      const vacancy = [...vacancies].reverse().find((item) => ["open", "published", "verified"].includes(item.status));
+      if (!vacancy) {
+        scrollToPanel("records-panel", "No open vacancy found. Create or publish a vacancy first.");
+        return;
+      }
+      $("status").textContent = `Running matching for ${vacancy.title}...`;
+      const result = await postJson(`/api/vacancies/${encodeURIComponent(vacancy.id)}/match`, {minimum_score: 60});
+      $("status").textContent = `Matching complete: ${result.matches.length} matches.`;
+      await loadWorkspace();
+      scrollToPanel("candidate-pipeline-panel", `Matching complete: ${result.matches.length} matches.`);
     }
 
     document.querySelectorAll("[data-role]").forEach((button) => {
