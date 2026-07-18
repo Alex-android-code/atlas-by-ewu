@@ -1174,6 +1174,24 @@ DASHBOARD_HTML = """
       background: rgba(0,0,0,0.22);
       outline: none;
     }
+    input[type="file"] {
+      padding: 9px 10px;
+      border-style: dashed;
+      border-color: rgba(212,175,55,0.42);
+      color: var(--muted);
+      cursor: pointer;
+    }
+    input[type="file"]::file-selector-button {
+      min-height: 30px;
+      margin-right: 10px;
+      border: 0;
+      border-radius: 9px;
+      padding: 0 10px;
+      color: #130f05;
+      background: var(--gold);
+      font-weight: 760;
+      cursor: pointer;
+    }
     input:focus, select:focus {
       border-color: rgba(212,175,55,0.62);
       box-shadow: 0 0 0 4px rgba(212,175,55,0.10);
@@ -1312,6 +1330,7 @@ DASHBOARD_HTML = """
           <label>Профессия<input name="profession_code" value="welder" required /></label>
           <label>Опыт, лет<input name="years_of_experience" type="number" value="4" min="0" /></label>
           <label>Языки<input name="languages" value="uk,pl" /></label>
+          <label>Фото профиля<input name="profile_photo" type="file" accept="image/jpeg,image/png,image/webp" /></label>
           <button class="primary" type="submit">Создать кандидата</button>
         </form>
 
@@ -1373,6 +1392,14 @@ DASHBOARD_HTML = """
     }
     const postJson = (url, payload) => sendJson("POST", url, payload);
     const patchJson = (url, payload) => sendJson("PATCH", url, payload);
+    async function uploadFile(url, file) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch(url, {method: "POST", body: formData});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Upload failed");
+      return data;
+    }
 
     async function loadAll() {
       setStatus("Обновляю CRM...");
@@ -1595,7 +1622,10 @@ DASHBOARD_HTML = """
 
     $("candidate-form").addEventListener("submit", async event => {
       event.preventDefault();
-      const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+      const form = event.currentTarget;
+      const rawFormData = new FormData(form);
+      const data = Object.fromEntries(rawFormData.entries());
+      const photo = rawFormData.get("profile_photo");
       const result = await postJson("/api/candidates", {
         first_name: data.first_name,
         last_name: data.last_name,
@@ -1607,7 +1637,12 @@ DASHBOARD_HTML = """
         years_of_experience: Number(data.years_of_experience || 0),
         metadata: {}
       });
-      setStatus(`Кандидат создан: ${result.candidate.id}`);
+      if (photo instanceof File && photo.size > 0) {
+        await uploadFile(`/api/candidates/${encodeURIComponent(result.candidate.id)}/photo`, photo);
+        setStatus(`Кандидат создан: ${result.candidate.id}. Фото прикреплено.`);
+      } else {
+        setStatus(`Кандидат создан: ${result.candidate.id}`);
+      }
       await loadAll();
     });
     $("employer-form").addEventListener("submit", async event => {

@@ -6,7 +6,7 @@ import secrets
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -130,6 +130,9 @@ app.mount(
     StaticFiles(directory=Path(__file__).resolve().parent / "static"),
     name="static",
 )
+UPLOADS_DIR = Path(os.getenv("ATLAS_DATA_DIR", "data")) / "uploads"
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 app.include_router(ewu_bot_router)
 
 
@@ -892,6 +895,43 @@ def create_candidate(payload: CandidateCreate) -> dict:
     return get_operations_workflow().onboard_candidate(candidate)
 
 
+@app.post("/api/candidates/{candidate_id}/photo")
+def upload_candidate_photo(candidate_id: str, request: Request, file: UploadFile = File(...)) -> dict:
+    _require_admin(request)
+    candidate = get_crm_service().candidates.get(candidate_id)
+    if candidate is None:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG or WebP photos are allowed")
+    extension = _safe_photo_extension(file.filename, file.content_type)
+    photo_dir = UPLOADS_DIR / "candidate_photos"
+    photo_dir.mkdir(parents=True, exist_ok=True)
+    target_name = f"{candidate_id}{extension}"
+    target_path = photo_dir / target_name
+    max_bytes = 5 * 1024 * 1024
+    written = 0
+    with target_path.open("wb") as handle:
+        while True:
+            chunk = file.file.read(1024 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                handle.close()
+                target_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Photo is too large. Maximum size is 5 MB")
+            handle.write(chunk)
+    candidate.metadata["profile_photo"] = {
+        "filename": file.filename or target_name,
+        "content_type": file.content_type,
+        "size_bytes": written,
+        "url": f"/uploads/candidate_photos/{target_name}",
+        "uploaded_at": utc_now_iso(),
+    }
+    get_crm_service().candidates.update(candidate)
+    return {"candidate": candidate.to_dict(), "profile_photo": candidate.metadata["profile_photo"]}
+
+
 @app.patch("/api/candidates/{candidate_id}/status")
 def update_candidate_status(candidate_id: str, payload: StatusUpdate, request: Request) -> dict:
     _require_admin(request)
@@ -1099,6 +1139,18 @@ def _require_admin(request: Request) -> None:
     if _is_admin_authorized(request):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _safe_photo_extension(filename: str | None, content_type: str | None) -> str:
+    allowed_by_type = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+    }
+    if content_type in allowed_by_type:
+        return allowed_by_type[content_type]
+    suffix = Path(filename or "").suffix.lower()
+    return suffix if suffix in {".jpg", ".jpeg", ".png", ".webp"} else ".jpg"
 
 
 @app.post("/api/demo/seed")

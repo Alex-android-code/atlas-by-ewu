@@ -69,6 +69,11 @@ class AdminSecurityTests(unittest.TestCase):
             app_module.get_user_competency_map("user-1", request())
         self.assertEqual(ctx.exception.status_code, 403)
 
+    def test_photo_upload_helpers_are_restricted_and_safe(self):
+        self.assertEqual(app_module._safe_photo_extension("photo.png", "image/png"), ".png")
+        self.assertEqual(app_module._safe_photo_extension("photo.exe", "image/jpeg"), ".jpg")
+        self.assertEqual(app_module._safe_photo_extension("photo.exe", "application/octet-stream"), ".jpg")
+
     def test_admin_login_rate_limit_blocks_repeated_attempts(self):
         for _ in range(app_module.ADMIN_LOGIN_LIMIT_PER_MINUTE):
             app_module._enforce_admin_login_rate_limit("1.2.3.4")
