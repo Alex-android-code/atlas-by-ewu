@@ -18,6 +18,7 @@ from api.dependencies import (
     get_agent_profile_service,
     get_competency_intelligence_service,
     get_crm_service,
+    get_development_recommendation_service,
     get_dynamic_interview_service,
     get_operations_workflow,
     get_rodo_service,
@@ -38,6 +39,7 @@ from api.schemas import (
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
     DevelopmentPlanCreate,
+    DevelopmentRecommendationCreate,
     DynamicInterviewAnswer,
     DynamicInterviewStart,
     EmployerCreate,
@@ -372,6 +374,18 @@ def create_development_plan(payload: DevelopmentPlanCreate, request: Request) ->
         if item.user_id == payload.user_id and (not selected_gap_ids or item.id in selected_gap_ids)
     ]
     return service.create_development_plan_from_gaps(payload.user_id, gaps, title=payload.title)
+
+
+@app.post("/api/development/recommendations")
+def create_development_recommendation(payload: DevelopmentRecommendationCreate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        return get_development_recommendation_service().recommend_for_skill_gap(
+            user_id=payload.user_id,
+            skill_gap_id=payload.skill_gap_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 def _target_requirement_from_payload(payload: TargetCompetencyRequirement):

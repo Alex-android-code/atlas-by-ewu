@@ -159,6 +159,11 @@ class DevelopmentPlanCreate(BaseModel):
     skill_gap_ids: list[str] = Field(default_factory=list)
 
 
+class DevelopmentRecommendationCreate(BaseModel):
+    user_id: str
+    skill_gap_id: str
+
+
 class DynamicInterviewStart(BaseModel):
     user_id: str
     role: str = "candidate"

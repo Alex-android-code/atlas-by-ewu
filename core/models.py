@@ -498,6 +498,113 @@ class DynamicInterviewSession(SerializableModel):
 
 
 @dataclass
+class TrainingProvider(SerializableModel):
+    name: str
+    provider_type: str = "training_center"
+    id: str = field(default_factory=lambda: new_id("TPR"))
+    country_code: str | None = None
+    partner_status: str = "none"
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TrainingProgram(SerializableModel):
+    provider_id: str
+    title: str
+    development_method: str = "course"
+    id: str = field(default_factory=lambda: new_id("TPG"))
+    duration: str = ""
+    estimated_cost: str = ""
+    url: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TrainingProgramCompetency(SerializableModel):
+    training_program_id: str
+    competency_id: str
+    target_level: int = 1
+    id: str = field(default_factory=lambda: new_id("TPC"))
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class Certification(SerializableModel):
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("CERT"))
+    issuing_body: str = ""
+    country_code: str | None = None
+    validity_period_months: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class MentorshipProgram(SerializableModel):
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("MENT"))
+    mentor_type: str = "internal"
+    duration: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class InternalTrainingProgram(SerializableModel):
+    employer_id: str
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("ITRN"))
+    duration: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PracticalAssessment(SerializableModel):
+    competency_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("PASSM"))
+    assessment_type: str = "practical_test"
+    estimated_duration: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DevelopmentResource(SerializableModel):
+    competency_id: str
+    title: str
+    resource_type: str
+    id: str = field(default_factory=lambda: new_id("DRES"))
+    url: str = ""
+    duration: str = ""
+    estimated_cost: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TrainingRecommendation(SerializableModel):
+    user_id: str
+    competency_id: str
+    reason: str
+    recommended_method: str
+    id: str = field(default_factory=lambda: new_id("TREC"))
+    current_level: int = 0
+    target_level: int = 1
+    career_goal_link: str = ""
+    vacancy_link: str = ""
+    alternatives: list[str] = field(default_factory=list)
+    duration: str = ""
+    estimated_cost: str = ""
+    expected_result: str = ""
+    priority: str = "medium"
+    confidence_score: float = 0.5
+    sources: list[str] = field(default_factory=list)
+    explanation: str = ""
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"

@@ -16,15 +16,20 @@ from database.repositories import (
     DataSubjectRequestRepository,
     DevelopmentPlanRepository,
     DevelopmentPlanStepRepository,
+    DevelopmentResourceRepository,
     DocumentRepository,
     DynamicInterviewSessionRepository,
     EmployerRepository,
     EmployerCompetencyRequirementRepository,
     MatchRepository,
     OpportunityRepository,
+    PracticalAssessmentRepository,
     ProfessionalDNARepository,
     SubscriptionRepository,
     SkillGapRepository,
+    TrainingProgramCompetencyRepository,
+    TrainingProgramRepository,
+    TrainingRecommendationRepository,
     UserRepository,
     UserCompetencyRepository,
     UserPreferenceRepository,
@@ -34,6 +39,10 @@ from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
+from services.development_recommendations import (
+    DevelopmentRecommendationRepositories,
+    DevelopmentRecommendationService,
+)
 from services.dynamic_interview import DynamicInterviewService
 from services.rodo_service import RodoService
 from services.skill_gap_analysis import SkillGapService
@@ -118,3 +127,17 @@ def get_dynamic_interview_service() -> DynamicInterviewService:
 
 def get_skill_gap_service() -> SkillGapService:
     return SkillGapService(competency_service=get_competency_intelligence_service())
+
+
+def get_development_recommendation_service() -> DevelopmentRecommendationService:
+    database = get_database()
+    return DevelopmentRecommendationService(
+        repositories=DevelopmentRecommendationRepositories(
+            training_programs=TrainingProgramRepository(database),
+            training_program_competencies=TrainingProgramCompetencyRepository(database),
+            practical_assessments=PracticalAssessmentRepository(database),
+            development_resources=DevelopmentResourceRepository(database),
+            training_recommendations=TrainingRecommendationRepository(database),
+        ),
+        competency_service=get_competency_intelligence_service(),
+    )

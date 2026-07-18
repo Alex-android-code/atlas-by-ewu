@@ -20,6 +20,7 @@ from core.models import (
     DataSubjectRequest,
     DevelopmentPlan,
     DevelopmentPlanStep,
+    DevelopmentResource,
     Document,
     DynamicInterviewSession,
     Employer,
@@ -29,8 +30,16 @@ from core.models import (
     ProfessionCompetencyModel,
     ProfessionProfile,
     ProfessionalDNA,
+    Certification,
+    InternalTrainingProgram,
+    MentorshipProgram,
+    PracticalAssessment,
     Subscription,
     SkillGap,
+    TrainingProgram,
+    TrainingProgramCompetency,
+    TrainingProvider,
+    TrainingRecommendation,
     User,
     UpskillingOpportunity,
     UserCompetency,
@@ -258,3 +267,48 @@ class UpskillingOpportunityRepository(JsonRepository[UpskillingOpportunity]):
 class DynamicInterviewSessionRepository(JsonRepository[DynamicInterviewSession]):
     collection = "dynamic_interview_sessions"
     model_class = DynamicInterviewSession
+
+
+class TrainingProviderRepository(JsonRepository[TrainingProvider]):
+    collection = "training_providers"
+    model_class = TrainingProvider
+
+
+class TrainingProgramRepository(JsonRepository[TrainingProgram]):
+    collection = "training_programs"
+    model_class = TrainingProgram
+
+
+class TrainingProgramCompetencyRepository(JsonRepository[TrainingProgramCompetency]):
+    collection = "training_program_competencies"
+    model_class = TrainingProgramCompetency
+
+
+class CertificationRepository(JsonRepository[Certification]):
+    collection = "certifications"
+    model_class = Certification
+
+
+class MentorshipProgramRepository(JsonRepository[MentorshipProgram]):
+    collection = "mentorship_programs"
+    model_class = MentorshipProgram
+
+
+class InternalTrainingProgramRepository(JsonRepository[InternalTrainingProgram]):
+    collection = "internal_training_programs"
+    model_class = InternalTrainingProgram
+
+
+class PracticalAssessmentRepository(JsonRepository[PracticalAssessment]):
+    collection = "practical_assessments"
+    model_class = PracticalAssessment
+
+
+class DevelopmentResourceRepository(JsonRepository[DevelopmentResource]):
+    collection = "development_resources"
+    model_class = DevelopmentResource
+
+
+class TrainingRecommendationRepository(JsonRepository[TrainingRecommendation]):
+    collection = "training_recommendations"
+    model_class = TrainingRecommendation
