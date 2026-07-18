@@ -164,6 +164,33 @@ class DevelopmentRecommendationCreate(BaseModel):
     skill_gap_id: str
 
 
+class CorporateDepartmentCreate(BaseModel):
+    employer_id: str
+    name: str
+    parent_department_id: str | None = None
+
+
+class CorporatePositionCreate(BaseModel):
+    employer_id: str
+    title: str
+    department_id: str | None = None
+    headcount_required: int = Field(default=1, ge=0)
+    role_functions: list[str] = Field(default_factory=list)
+
+
+class CorporateEmployeeCreate(BaseModel):
+    employer_id: str
+    user_id: str
+    position_id: str | None = None
+    department_id: str | None = None
+    turnover_risk_factors: list[str] = Field(default_factory=list)
+
+
+class CorporateAnalysisRequest(BaseModel):
+    employer_id: str
+    horizon_months: int = Field(default=6, ge=1, le=60)
+
+
 class DynamicInterviewStart(BaseModel):
     user_id: str
     role: str = "candidate"

@@ -605,6 +605,68 @@ class TrainingRecommendation(SerializableModel):
 
 
 @dataclass
+class CorporateDepartment(SerializableModel):
+    employer_id: str
+    name: str
+    id: str = field(default_factory=lambda: new_id("DEPT"))
+    parent_department_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CorporatePosition(SerializableModel):
+    employer_id: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("POS"))
+    department_id: str | None = None
+    headcount_required: int = 1
+    role_functions: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CorporateEmployeeProfile(SerializableModel):
+    employer_id: str
+    user_id: str
+    position_id: str | None = None
+    id: str = field(default_factory=lambda: new_id("CEMP"))
+    department_id: str | None = None
+    status: str = "active"
+    turnover_risk_factors: list[str] = field(default_factory=list)
+    certificates: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class WorkforceDemandForecast(SerializableModel):
+    employer_id: str
+    horizon_months: int
+    id: str = field(default_factory=lambda: new_id("WDF"))
+    required_positions: list[dict[str, Any]] = field(default_factory=list)
+    required_competencies: list[dict[str, Any]] = field(default_factory=list)
+    confidence_score: float = 0.5
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CorporateRecommendation(SerializableModel):
+    employer_id: str
+    recommendation_type: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("CREC"))
+    target_user_id: str | None = None
+    target_position_id: str | None = None
+    risk_level: str = "medium"
+    confidence_score: float = 0.5
+    requires_human_decision: bool = True
+    forbidden_automatic_actions: list[str] = field(default_factory=list)
+    rationale: str = ""
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"

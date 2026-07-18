@@ -17,6 +17,7 @@ from api.dashboard import DASHBOARD_HTML
 from api.dependencies import (
     get_agent_profile_service,
     get_competency_intelligence_service,
+    get_corporate_ai_agent_service,
     get_crm_service,
     get_development_recommendation_service,
     get_dynamic_interview_service,
@@ -38,6 +39,10 @@ from api.schemas import (
     ConsentCreate,
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
+    CorporateAnalysisRequest,
+    CorporateDepartmentCreate,
+    CorporateEmployeeCreate,
+    CorporatePositionCreate,
     DevelopmentPlanCreate,
     DevelopmentRecommendationCreate,
     DynamicInterviewAnswer,
@@ -386,6 +391,52 @@ def create_development_recommendation(payload: DevelopmentRecommendationCreate, 
         )
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/corporate/departments")
+def create_corporate_department(payload: CorporateDepartmentCreate, request: Request) -> dict:
+    _require_admin(request)
+    department = get_corporate_ai_agent_service().add_department(
+        employer_id=payload.employer_id,
+        name=payload.name,
+        parent_department_id=payload.parent_department_id,
+    )
+    return {"status": "ok", "department": department.to_dict()}
+
+
+@app.post("/api/corporate/positions")
+def create_corporate_position(payload: CorporatePositionCreate, request: Request) -> dict:
+    _require_admin(request)
+    position = get_corporate_ai_agent_service().add_position(
+        employer_id=payload.employer_id,
+        title=payload.title,
+        department_id=payload.department_id,
+        headcount_required=payload.headcount_required,
+        role_functions=payload.role_functions,
+    )
+    return {"status": "ok", "position": position.to_dict()}
+
+
+@app.post("/api/corporate/employees")
+def create_corporate_employee(payload: CorporateEmployeeCreate, request: Request) -> dict:
+    _require_admin(request)
+    employee = get_corporate_ai_agent_service().add_employee(
+        employer_id=payload.employer_id,
+        user_id=payload.user_id,
+        position_id=payload.position_id,
+        department_id=payload.department_id,
+        turnover_risk_factors=payload.turnover_risk_factors,
+    )
+    return {"status": "ok", "employee": employee.to_dict()}
+
+
+@app.post("/api/corporate/analyze")
+def analyze_corporate_ai(payload: CorporateAnalysisRequest, request: Request) -> dict:
+    _require_admin(request)
+    return get_corporate_ai_agent_service().analyze_company(
+        employer_id=payload.employer_id,
+        horizon_months=payload.horizon_months,
+    )
 
 
 def _target_requirement_from_payload(payload: TargetCompetencyRequirement):

@@ -17,6 +17,10 @@ from core.models import (
     CompetencyEvidence,
     CompetencyRelationship,
     ConsentRecord,
+    CorporateDepartment,
+    CorporateEmployeeProfile,
+    CorporatePosition,
+    CorporateRecommendation,
     DataSubjectRequest,
     DevelopmentPlan,
     DevelopmentPlanStep,
@@ -45,6 +49,7 @@ from core.models import (
     UserCompetency,
     UserPreference,
     Vacancy,
+    WorkforceDemandForecast,
     WorkforceCompetencyGap,
 )
 from database.json_database import JsonDatabase
@@ -312,3 +317,28 @@ class DevelopmentResourceRepository(JsonRepository[DevelopmentResource]):
 class TrainingRecommendationRepository(JsonRepository[TrainingRecommendation]):
     collection = "training_recommendations"
     model_class = TrainingRecommendation
+
+
+class CorporateDepartmentRepository(JsonRepository[CorporateDepartment]):
+    collection = "corporate_departments"
+    model_class = CorporateDepartment
+
+
+class CorporatePositionRepository(JsonRepository[CorporatePosition]):
+    collection = "corporate_positions"
+    model_class = CorporatePosition
+
+
+class CorporateEmployeeProfileRepository(JsonRepository[CorporateEmployeeProfile]):
+    collection = "corporate_employee_profiles"
+    model_class = CorporateEmployeeProfile
+
+
+class WorkforceDemandForecastRepository(JsonRepository[WorkforceDemandForecast]):
+    collection = "workforce_demand_forecasts"
+    model_class = WorkforceDemandForecast
+
+
+class CorporateRecommendationRepository(JsonRepository[CorporateRecommendation]):
+    collection = "corporate_recommendations"
+    model_class = CorporateRecommendation

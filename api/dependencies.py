@@ -13,6 +13,10 @@ from database.repositories import (
     CareerGoalRepository,
     CompetencyRepository,
     ConsentRepository,
+    CorporateDepartmentRepository,
+    CorporateEmployeeProfileRepository,
+    CorporatePositionRepository,
+    CorporateRecommendationRepository,
     DataSubjectRequestRepository,
     DevelopmentPlanRepository,
     DevelopmentPlanStepRepository,
@@ -34,11 +38,14 @@ from database.repositories import (
     UserCompetencyRepository,
     UserPreferenceRepository,
     VacancyRepository,
+    WorkforceCompetencyGapRepository,
+    WorkforceDemandForecastRepository,
 )
 from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
+from services.corporate_ai import CorporateAIAgentService, CorporateAIRepositories
 from services.development_recommendations import (
     DevelopmentRecommendationRepositories,
     DevelopmentRecommendationService,
@@ -140,4 +147,20 @@ def get_development_recommendation_service() -> DevelopmentRecommendationService
             training_recommendations=TrainingRecommendationRepository(database),
         ),
         competency_service=get_competency_intelligence_service(),
+    )
+
+
+def get_corporate_ai_agent_service() -> CorporateAIAgentService:
+    database = get_database()
+    return CorporateAIAgentService(
+        CorporateAIRepositories(
+            departments=CorporateDepartmentRepository(database),
+            positions=CorporatePositionRepository(database),
+            employees=CorporateEmployeeProfileRepository(database),
+            employer_requirements=EmployerCompetencyRequirementRepository(database),
+            user_competencies=UserCompetencyRepository(database),
+            workforce_gaps=WorkforceCompetencyGapRepository(database),
+            forecasts=WorkforceDemandForecastRepository(database),
+            recommendations=CorporateRecommendationRepository(database),
+        )
     )
