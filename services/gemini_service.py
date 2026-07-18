@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from dataclasses import dataclass
 import json
@@ -93,6 +94,27 @@ class GeminiService:
                 if not error.retryable or attempt == attempts - 1:
                     raise
                 sleep(RETRY_DELAYS_SECONDS[attempt])
+        raise last_error or GeminiServiceError("Gemini failed", "unknown", retryable=True)
+
+    async def generate_text_async(self, prompt: str, language: str = "en") -> str:
+        if not self.is_configured():
+            raise GeminiServiceError("Gemini API key is not configured", "not_configured", retryable=False)
+        prompt = sanitize_user_text(prompt, max_length=24000)
+        if not prompt:
+            raise GeminiServiceError("Gemini prompt is empty", "empty_prompt", retryable=False)
+        last_error: GeminiServiceError | None = None
+        attempts = min(self.max_retries, len(RETRY_DELAYS_SECONDS))
+        for attempt in range(attempts):
+            try:
+                text = await self._call_model_async(prompt)
+                if not text.strip():
+                    raise GeminiServiceError("Gemini returned empty response", "empty_response", retryable=True)
+                return text.strip()
+            except GeminiServiceError as error:
+                last_error = error
+                if not error.retryable or attempt == attempts - 1:
+                    raise
+                await asyncio.sleep(RETRY_DELAYS_SECONDS[attempt])
         raise last_error or GeminiServiceError("Gemini failed", "unknown", retryable=True)
 
     def generate_json(self, prompt: str, language: str = "en") -> GeminiJsonResponse:
@@ -204,6 +226,17 @@ class GeminiService:
         finally:
             if not shutdown_started and future.done():
                 executor.shutdown(wait=False, cancel_futures=True)
+
+    async def _call_model_async(self, prompt: str) -> str:
+        client = self._client_instance()
+        aio_client = getattr(client, "aio", None)
+        try:
+            if aio_client is not None and hasattr(aio_client, "models"):
+                response = await aio_client.models.generate_content(model=self.model, contents=prompt)
+                return extract_text(response)
+            return await asyncio.to_thread(self._call_model, prompt)
+        except Exception as error:
+            raise classify_gemini_error(error) from error
 
     @staticmethod
     def _parse_json_response(text: str) -> GeminiJsonResponse | None:

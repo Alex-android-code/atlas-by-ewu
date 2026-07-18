@@ -546,41 +546,34 @@ def ai_message(payload: AIMessageRequest, request: Request) -> dict:
     message = sanitize_user_text(payload.message)
     if not message:
         raise HTTPException(status_code=400, detail="Message is empty")
-    prompt = build_structured_prompt(
-        language=language,
-        user_role=payload.role,
-        current_step=payload.current_step,
-        profile_data=payload.profile_data,
-        recent_messages=payload.recent_messages,
-        task=payload.task,
+    ai_response = send_message_to_ai(
+        user_id=client_id,
+        agent_type=payload.role,
+        context={
+            "user_id": client_id,
+            "role": payload.role,
+            "language": language,
+            "current_step": payload.current_step,
+            "profile": payload.profile_data,
+            "recent_messages": payload.recent_messages,
+            "task": payload.task,
+            "metadata": {"source": "api_ai_message", "current_step": payload.current_step},
+        },
+        message=message,
     )
-    prompt = f"{prompt}\n\nUser message:\n{message}"
-    service = GeminiService()
-    try:
-        result = service.generate_json(prompt, language=language)
-        return {
-            "success": True,
-            "message": result.message,
-            "next_field": result.next_field,
-            "profile_updates": result.profile_updates,
-            "warnings": result.warnings,
-            "confidence": result.confidence,
-            "provider": "gemini",
-            "model": service.model,
-            "fallback_used": False,
-        }
-    except Exception as error:
-        return {
-            "success": False,
-            "message": fallback_message(language),
-            "next_field": None,
-            "profile_updates": {},
-            "warnings": ["ai_unavailable"],
-            "provider": "gemini",
-            "model": service.model,
-            "fallback_used": True,
-            "error_type": getattr(error, "error_type", "unknown"),
-        }
+    metadata = ai_response.get("metadata", {})
+    return {
+        "success": metadata.get("status") == "ok",
+        "message": ai_response.get("reply") or fallback_message(language),
+        "next_field": None,
+        "profile_updates": {},
+        "warnings": [] if metadata.get("status") == "ok" else ["ai_unavailable"],
+        "confidence": ai_response.get("confidence", 0.0),
+        "provider": metadata.get("provider"),
+        "model": metadata.get("model"),
+        "fallback_used": metadata.get("source") != "model",
+        "request_id": metadata.get("request_id"),
+    }
 
 
 @app.get("/api/public/market-map")

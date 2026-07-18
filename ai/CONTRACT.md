@@ -4,48 +4,58 @@ This contract keeps ATLAS stable when a real AI provider is connected.
 
 ## Boundary
 
-Only `ai.ai_gateway.AIGateway` may call model providers.
+Only `ai.ai_gateway.MultiModelGateway` / `AIGateway` may call model providers.
 
 Agents, API routes, CRM workflows, matching, document checks and public UI must not import OpenAI, Gemini, Claude or local model clients directly.
 
 ## Provider Input
 
-Every provider receives an `AIRequest`:
+Every provider receives separated system, context and user-message inputs:
 
-- `request_id`
-- `user_id`
-- `agent_type`
-- `context`
-- `message`
+```python
+async def call_model(
+    *,
+    system_prompt: str,
+    user_message: str,
+    context: dict[str, Any],
+    role: str,
+    estimated_tokens: int,
+) -> ModelResult:
+    ...
+```
 
 The provider may use context to produce text, extraction or reasoning, but it must not mutate ATLAS memory, CRM, files or database records directly.
+The user message must be sent as user content, never as a system instruction.
 
 ## Provider Output
 
-Every provider must return `AIResponse` or a compatible dictionary:
+Every provider must return `ModelResult`:
 
-```json
-{
-  "reply": "string",
-  "action": "string or null",
-  "confidence": 0.0,
-  "handoff_required": false,
-  "metadata": {}
-}
+```python
+ModelResult(
+    content="string",
+    provider="openai",
+    model="configured-model",
+    input_tokens=None,
+    output_tokens=None,
+    estimated_cost=None,
+    latency_ms=0,
+    cached=False,
+)
 ```
 
-The gateway normalizes this response:
+The gateway returns a standardized agent response and keeps a legacy `AIResponse` wrapper for existing synchronous callers.
 
-- empty replies become safe fallback replies;
-- confidence is clamped between `0.0` and `1.0`;
-- replies are capped to 4000 characters;
-- metadata receives `provider`, `request_id`, `latency_ms`, `fallback_used` and `gateway`.
+- empty provider replies become safe template replies;
+- content is capped to 4000 characters;
+- usage receives provider, model, request id, latency, token usage and fallback status;
+- exact cache keys include tenant id, user id, role, language, country, profile version, prompt version, router version and model.
 
 ## Failure Rule
 
 Provider failure must never break public chat.
 
-If the selected provider fails, the gateway calls the configured fallback provider. If fallback also fails, the gateway returns a safe handoff response.
+If the selected provider fails, the gateway follows `RoutingDecision.fallback_order` and stops after the configured retry limit. If fallback also fails, the gateway returns a safe template response.
 
 ## Public Chat Rule
 
@@ -67,7 +77,7 @@ The provider must not expose internal scoring, CRM labels, risk labels or extrac
 
 Before switching `ATLAS_AI_PROVIDER` to a real provider:
 
-1. Implement `send(request: AIRequest) -> AIResponse`.
+1. Implement `call_model(...) -> ModelResult`.
 2. Implement `health() -> dict`.
 3. Register the provider in `get_default_ai_gateway()` or an application factory.
 4. Keep provider credentials in environment variables.

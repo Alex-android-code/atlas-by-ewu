@@ -20,7 +20,8 @@ class EwuBotWebhookSecurityTests(unittest.TestCase):
         request = FakeRequest(b"{}", headers={"content-length": str(ewu_bot_webhook.MAX_WEBHOOK_BODY_BYTES + 1)})
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(ewu_bot_webhook._read_webhook_body(request))
+            with asyncio.Runner() as runner:
+                runner.run(ewu_bot_webhook._read_webhook_body(request))
 
         self.assertEqual(ctx.exception.status_code, 413)
 
@@ -28,7 +29,8 @@ class EwuBotWebhookSecurityTests(unittest.TestCase):
         request = FakeRequest(b"{}", headers={"content-length": "invalid"})
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(ewu_bot_webhook._read_webhook_body(request))
+            with asyncio.Runner() as runner:
+                runner.run(ewu_bot_webhook._read_webhook_body(request))
 
         self.assertEqual(ctx.exception.status_code, 400)
 
@@ -36,14 +38,16 @@ class EwuBotWebhookSecurityTests(unittest.TestCase):
         request = FakeRequest(b"x" * (ewu_bot_webhook.MAX_WEBHOOK_BODY_BYTES + 1))
 
         with self.assertRaises(HTTPException) as ctx:
-            asyncio.run(ewu_bot_webhook._read_webhook_body(request))
+            with asyncio.Runner() as runner:
+                runner.run(ewu_bot_webhook._read_webhook_body(request))
 
         self.assertEqual(ctx.exception.status_code, 413)
 
     def test_accepts_small_payload(self):
         request = FakeRequest(b'{"update_id":1}')
 
-        body = asyncio.run(ewu_bot_webhook._read_webhook_body(request))
+        with asyncio.Runner() as runner:
+            body = runner.run(ewu_bot_webhook._read_webhook_body(request))
 
         self.assertEqual(body, b'{"update_id":1}')
 
