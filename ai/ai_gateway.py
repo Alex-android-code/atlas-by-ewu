@@ -344,7 +344,10 @@ class MultiModelGateway:
             "action": "ai_gateway_response",
             "confidence": 0.7 if result["status"] == "ok" else 0.0,
             "handoff_required": result["requires_human_review"],
-            "metadata": {**result, "fallback_used": result.get("source") != "model"},
+            "metadata": {
+                **result,
+                "fallback_used": result.get("source") != "model" or result.get("provider") == "mock",
+            },
         }
 
     def health(self) -> dict[str, Any]:
