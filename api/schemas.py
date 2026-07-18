@@ -212,6 +212,18 @@ class AgentCollaborationConsentRevoke(BaseModel):
     actor_id: str = "user"
 
 
+class CustomerSubscriptionSet(BaseModel):
+    customer_id: str
+    customer_type: str = "user"
+    plan_code: str
+
+
+class EntitlementCheckRequest(BaseModel):
+    customer_id: str
+    customer_type: str = "user"
+    feature_code: str
+
+
 class DynamicInterviewStart(BaseModel):
     user_id: str
     role: str = "candidate"

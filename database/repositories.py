@@ -34,6 +34,7 @@ from core.models import (
     EmployerCompetencyRequirement,
     Match,
     Opportunity,
+    PlanFeature,
     ProfessionCompetencyModel,
     ProfessionProfile,
     ProfessionalDNA,
@@ -42,7 +43,10 @@ from core.models import (
     MentorshipProgram,
     PracticalAssessment,
     Subscription,
+    SubscriptionFeature,
+    SubscriptionPlan,
     SkillGap,
+    CustomerSubscription,
     TrainingProgram,
     TrainingProgramCompetency,
     TrainingProvider,
@@ -195,6 +199,26 @@ class DataSubjectRequestRepository(JsonRepository[DataSubjectRequest]):
 class SubscriptionRepository(JsonRepository[Subscription]):
     collection = "subscriptions"
     model_class = Subscription
+
+
+class SubscriptionPlanRepository(JsonRepository[SubscriptionPlan]):
+    collection = "subscription_plans"
+    model_class = SubscriptionPlan
+
+
+class SubscriptionFeatureRepository(JsonRepository[SubscriptionFeature]):
+    collection = "subscription_features"
+    model_class = SubscriptionFeature
+
+
+class PlanFeatureRepository(JsonRepository[PlanFeature]):
+    collection = "plan_features"
+    model_class = PlanFeature
+
+
+class CustomerSubscriptionRepository(JsonRepository[CustomerSubscription]):
+    collection = "customer_subscriptions"
+    model_class = CustomerSubscription
 
 
 class CompetencyCategoryRepository(JsonRepository[CompetencyCategory]):

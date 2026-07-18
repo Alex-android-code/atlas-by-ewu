@@ -56,6 +56,33 @@
         "priority_opportunities": true,
         "advanced_analytics": true
       }
+    },
+    "enterprise": {
+      "label": "Enterprise",
+      "features": {
+        "agent_creation": true,
+        "basic_professional_dna": true,
+        "basic_chat": true,
+        "limited_recommendations": true,
+        "basic_opportunity_search": true,
+        "extended_memory": true,
+        "document_control": true,
+        "career_strategy": true,
+        "cv_adaptation": true,
+        "interview_preparation": true,
+        "company_analysis": true,
+        "negotiation_module": true,
+        "human_review": true,
+        "personal_support": true,
+        "priority_opportunities": true,
+        "advanced_analytics": true,
+        "corporate_ai_agent": true,
+        "workforce_forecasting": true,
+        "consent_aware_agent_collaboration": true,
+        "enterprise_integrations": true,
+        "tenant_admin": true,
+        "audit_export": true
+      }
     }
   }
 }

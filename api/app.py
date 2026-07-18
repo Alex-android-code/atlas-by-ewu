@@ -22,6 +22,7 @@ from api.dependencies import (
     get_crm_service,
     get_development_recommendation_service,
     get_dynamic_interview_service,
+    get_entitlement_service,
     get_operations_workflow,
     get_rodo_service,
     get_skill_gap_service,
@@ -47,10 +48,12 @@ from api.schemas import (
     CorporateDepartmentCreate,
     CorporateEmployeeCreate,
     CorporatePositionCreate,
+    CustomerSubscriptionSet,
     DevelopmentPlanCreate,
     DevelopmentRecommendationCreate,
     DynamicInterviewAnswer,
     DynamicInterviewStart,
+    EntitlementCheckRequest,
     EmployerCreate,
     EmployerCompetencyRequirementCreate,
     LoginRequest,
@@ -655,9 +658,53 @@ def get_agent_dashboard(user_id: str) -> dict:
 
 @app.get("/api/subscriptions/features/{plan}")
 def get_subscription_features(plan: str) -> dict:
-    from services.agent_profile_service import load_subscription_features
+    return {
+        "plan": plan,
+        "features": {
+            item["code"]: item["features"]
+            for item in get_entitlement_service().catalog()["plans"]
+        }.get(plan, get_entitlement_service().catalog()["plans"][0]["features"]),
+    }
 
-    return {"plan": plan, "features": load_subscription_features(plan)}
+
+@app.get("/api/subscriptions/catalog")
+def get_subscription_catalog() -> dict:
+    return get_entitlement_service().catalog()
+
+
+@app.post("/api/admin/subscriptions/sync")
+def sync_subscription_catalog(request: Request) -> dict:
+    _require_admin(request)
+    return {"status": "ok", **get_entitlement_service().sync_catalog()}
+
+
+@app.post("/api/admin/subscriptions/customers")
+def set_customer_subscription(payload: CustomerSubscriptionSet, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        subscription = get_entitlement_service().set_customer_subscription(
+            customer_id=payload.customer_id,
+            customer_type=payload.customer_type,
+            plan_code=payload.plan_code,
+        )
+        return {"status": "ok", "subscription": subscription.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/admin/subscriptions/entitlements/check")
+def check_customer_entitlement(payload: EntitlementCheckRequest, request: Request) -> dict:
+    _require_admin(request)
+    return {
+        "customer_id": payload.customer_id,
+        "customer_type": payload.customer_type,
+        "feature_code": payload.feature_code,
+        "allowed": get_entitlement_service().has_entitlement(
+            customer_id=payload.customer_id,
+            customer_type=payload.customer_type,
+            feature_code=payload.feature_code,
+        ),
+    }
 
 
 @app.get("/api/i18n/bootstrap")

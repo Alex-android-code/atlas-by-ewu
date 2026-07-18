@@ -21,6 +21,7 @@ from database.repositories import (
     CorporatePositionRepository,
     CorporateRecommendationRepository,
     DataSubjectRequestRepository,
+    CustomerSubscriptionRepository,
     DevelopmentPlanRepository,
     DevelopmentPlanStepRepository,
     DevelopmentResourceRepository,
@@ -31,8 +32,11 @@ from database.repositories import (
     MatchRepository,
     OpportunityRepository,
     PracticalAssessmentRepository,
+    PlanFeatureRepository,
     ProfessionalDNARepository,
     SubscriptionRepository,
+    SubscriptionFeatureRepository,
+    SubscriptionPlanRepository,
     SkillGapRepository,
     TrainingProgramCompetencyRepository,
     TrainingProgramRepository,
@@ -56,6 +60,7 @@ from services.development_recommendations import (
     DevelopmentRecommendationService,
 )
 from services.dynamic_interview import DynamicInterviewService
+from services.entitlements import EntitlementRepositories, EntitlementService
 from services.rodo_service import RodoService
 from services.skill_gap_analysis import SkillGapService
 from workflows.operations_workflow import OperationsWorkflow
@@ -180,5 +185,17 @@ def get_agent_collaboration_service() -> AgentCollaborationService:
             audit_events=AgentCollaborationAuditEventRepository(database),
             consents=ConsentRepository(database),
             upskilling_opportunities=UpskillingOpportunityRepository(database),
+        )
+    )
+
+
+def get_entitlement_service() -> EntitlementService:
+    database = get_database()
+    return EntitlementService(
+        EntitlementRepositories(
+            plans=SubscriptionPlanRepository(database),
+            features=SubscriptionFeatureRepository(database),
+            plan_features=PlanFeatureRepository(database),
+            customer_subscriptions=CustomerSubscriptionRepository(database),
         )
     )

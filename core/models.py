@@ -715,3 +715,42 @@ class Subscription(SerializableModel):
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SubscriptionPlan(SerializableModel):
+    code: str
+    label: str
+    id: str = field(default_factory=lambda: new_id("SPLAN"))
+    active: bool = True
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class SubscriptionFeature(SerializableModel):
+    code: str
+    label: str
+    id: str = field(default_factory=lambda: new_id("SFEAT"))
+    description: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PlanFeature(SerializableModel):
+    plan_code: str
+    feature_code: str
+    enabled: bool = True
+    id: str = field(default_factory=lambda: new_id("PFEAT"))
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class CustomerSubscription(SerializableModel):
+    customer_id: str
+    customer_type: str
+    plan_code: str = "start"
+    status: str = "active"
+    id: str = field(default_factory=lambda: new_id("CSUB"))
+    started_at: str = field(default_factory=utc_now_iso)
+    expires_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
