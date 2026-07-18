@@ -16,6 +16,7 @@ from api.chat import AI_CHAT_HTML
 from api.dashboard import DASHBOARD_HTML
 from api.dependencies import (
     get_agent_profile_service,
+    get_agent_collaboration_service,
     get_competency_intelligence_service,
     get_corporate_ai_agent_service,
     get_crm_service,
@@ -39,6 +40,9 @@ from api.schemas import (
     ConsentCreate,
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
+    AgentCollaborationConsentGrantCreate,
+    AgentCollaborationConsentRevoke,
+    AgentCollaborationProposalCreate,
     CorporateAnalysisRequest,
     CorporateDepartmentCreate,
     CorporateEmployeeCreate,
@@ -437,6 +441,58 @@ def analyze_corporate_ai(payload: CorporateAnalysisRequest, request: Request) ->
         employer_id=payload.employer_id,
         horizon_months=payload.horizon_months,
     )
+
+
+@app.post("/api/agent-collaboration/proposals")
+def create_agent_collaboration_proposal(payload: AgentCollaborationProposalCreate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        proposal = get_agent_collaboration_service().create_proposal(
+            employer_id=payload.employer_id,
+            user_id=payload.user_id,
+            proposal_type=payload.proposal_type,
+            title=payload.title,
+            data_categories=payload.data_categories,
+            actor_id=payload.actor_id,
+            metadata=payload.metadata,
+        )
+        return {"status": "ok", "proposal": proposal.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/agent-collaboration/consents/grant")
+def grant_agent_collaboration_consent(payload: AgentCollaborationConsentGrantCreate) -> dict:
+    try:
+        grant = get_agent_collaboration_service().grant_consent(
+            proposal_id=payload.proposal_id,
+            user_id=payload.user_id,
+            actor_id=payload.actor_id,
+        )
+        return {"status": "ok", "grant": grant.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/agent-collaboration/consents/revoke")
+def revoke_agent_collaboration_consent(payload: AgentCollaborationConsentRevoke) -> dict:
+    try:
+        grant = get_agent_collaboration_service().revoke_consent(
+            grant_id=payload.grant_id,
+            actor_id=payload.actor_id,
+        )
+        return {"status": "ok", "grant": grant.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/agent-collaboration/proposals/{proposal_id}")
+def get_agent_collaboration_status(proposal_id: str, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        return get_agent_collaboration_service().collaboration_status(proposal_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 def _target_requirement_from_payload(payload: TargetCompetencyRequirement):

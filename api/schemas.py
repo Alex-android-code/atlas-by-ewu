@@ -191,6 +191,27 @@ class CorporateAnalysisRequest(BaseModel):
     horizon_months: int = Field(default=6, ge=1, le=60)
 
 
+class AgentCollaborationProposalCreate(BaseModel):
+    employer_id: str
+    user_id: str
+    proposal_type: str
+    title: str
+    data_categories: list[str] = Field(default_factory=list)
+    actor_id: str = "corporate_admin"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentCollaborationConsentGrantCreate(BaseModel):
+    proposal_id: str
+    user_id: str
+    actor_id: str = "user"
+
+
+class AgentCollaborationConsentRevoke(BaseModel):
+    grant_id: str
+    actor_id: str = "user"
+
+
 class DynamicInterviewStart(BaseModel):
     user_id: str
     role: str = "candidate"

@@ -6,6 +6,9 @@ from crm.crm_service import CrmService
 from database.json_database import JsonDatabase
 from database.repositories import (
     AgentActionRepository,
+    AgentCollaborationAuditEventRepository,
+    AgentCollaborationProposalRepository,
+    AgentConsentGrantRepository,
     AgentMemoryRepository,
     AgentRecommendationRepository,
     CandidateRepository,
@@ -34,6 +37,7 @@ from database.repositories import (
     TrainingProgramCompetencyRepository,
     TrainingProgramRepository,
     TrainingRecommendationRepository,
+    UpskillingOpportunityRepository,
     UserRepository,
     UserCompetencyRepository,
     UserPreferenceRepository,
@@ -43,6 +47,7 @@ from database.repositories import (
 )
 from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
+from services.agent_collaboration import AgentCollaborationRepositories, AgentCollaborationService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
 from services.corporate_ai import CorporateAIAgentService, CorporateAIRepositories
@@ -162,5 +167,18 @@ def get_corporate_ai_agent_service() -> CorporateAIAgentService:
             workforce_gaps=WorkforceCompetencyGapRepository(database),
             forecasts=WorkforceDemandForecastRepository(database),
             recommendations=CorporateRecommendationRepository(database),
+        )
+    )
+
+
+def get_agent_collaboration_service() -> AgentCollaborationService:
+    database = get_database()
+    return AgentCollaborationService(
+        AgentCollaborationRepositories(
+            proposals=AgentCollaborationProposalRepository(database),
+            grants=AgentConsentGrantRepository(database),
+            audit_events=AgentCollaborationAuditEventRepository(database),
+            consents=ConsentRepository(database),
+            upskilling_opportunities=UpskillingOpportunityRepository(database),
         )
     )

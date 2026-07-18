@@ -6,6 +6,9 @@ from typing import Any, Generic, Protocol, TypeVar
 from core.models import (
     ActivityEvent,
     AgentAction,
+    AgentCollaborationAuditEvent,
+    AgentCollaborationProposal,
+    AgentConsentGrant,
     AgentMemoryRecord,
     AgentRecommendation,
     Candidate,
@@ -342,3 +345,18 @@ class WorkforceDemandForecastRepository(JsonRepository[WorkforceDemandForecast])
 class CorporateRecommendationRepository(JsonRepository[CorporateRecommendation]):
     collection = "corporate_recommendations"
     model_class = CorporateRecommendation
+
+
+class AgentCollaborationProposalRepository(JsonRepository[AgentCollaborationProposal]):
+    collection = "agent_collaboration_proposals"
+    model_class = AgentCollaborationProposal
+
+
+class AgentConsentGrantRepository(JsonRepository[AgentConsentGrant]):
+    collection = "agent_consent_grants"
+    model_class = AgentConsentGrant
+
+
+class AgentCollaborationAuditEventRepository(JsonRepository[AgentCollaborationAuditEvent]):
+    collection = "agent_collaboration_audit_events"
+    model_class = AgentCollaborationAuditEvent

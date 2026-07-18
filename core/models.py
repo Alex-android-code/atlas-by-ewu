@@ -667,6 +667,45 @@ class CorporateRecommendation(SerializableModel):
 
 
 @dataclass
+class AgentCollaborationProposal(SerializableModel):
+    employer_id: str
+    user_id: str
+    proposal_type: str
+    title: str
+    id: str = field(default_factory=lambda: new_id("ACP"))
+    status: str = "pending_user_consent"
+    consent_scope: str = "corporate_agent_collaboration"
+    legal_basis: str = "consent"
+    data_categories: list[str] = field(default_factory=list)
+    created_at: str = field(default_factory=utc_now_iso)
+    expires_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentConsentGrant(SerializableModel):
+    proposal_id: str
+    user_id: str
+    employer_id: str
+    scope: str
+    id: str = field(default_factory=lambda: new_id("ACG"))
+    status: str = "active"
+    granted_at: str = field(default_factory=utc_now_iso)
+    revoked_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class AgentCollaborationAuditEvent(SerializableModel):
+    proposal_id: str
+    event_type: str
+    actor_id: str
+    id: str = field(default_factory=lambda: new_id("ACAE"))
+    created_at: str = field(default_factory=utc_now_iso)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"
