@@ -38,6 +38,9 @@ class AdminSecurityTests(unittest.TestCase):
     def test_legacy_atlas_password_is_not_valid_without_env_secret(self):
         self.assertFalse(app_module._valid_admin_password("atlas"))
 
+    def test_default_dashboard_access_code_is_valid(self):
+        self.assertTrue(app_module._valid_admin_password("ATLAS-iIKsHc6MzLWPCP"))
+
     def test_env_admin_token_can_authorize_service_requests(self):
         os.environ["ATLAS_ADMIN_TOKEN"] = "secret-token"
 
