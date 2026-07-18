@@ -14,7 +14,7 @@ from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
 from api.agent import AGENT_DASHBOARD_HTML, AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
 from api.dashboard import DASHBOARD_HTML
-from api.dependencies import get_agent_profile_service, get_crm_service, get_operations_workflow
+from api.dependencies import get_agent_profile_service, get_crm_service, get_operations_workflow, get_rodo_service
 from api.employer import EMPLOYER_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
 from api.landing import LANDING_HTML
@@ -26,6 +26,9 @@ from api.schemas import (
     AgentOnboardingComplete,
     AnalyticsEventCreate,
     CandidateCreate,
+    ConsentCreate,
+    DataSubjectRequestCreate,
+    DataSubjectRequestStatusUpdate,
     EmployerCreate,
     LoginRequest,
     MatchRequest,
@@ -211,6 +214,70 @@ def api_logout(request: Request, response: Response) -> dict[str, str]:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "atlas_ewu"}
+
+
+@app.get("/api/privacy/notice")
+def privacy_notice(language: str = "uk") -> dict:
+    return get_rodo_service().privacy_notice(language=language)
+
+
+@app.post("/api/rodo/consents")
+def create_rodo_consent(payload: ConsentCreate, request: Request) -> dict:
+    consent = get_rodo_service().record_consent(
+        subject_id=payload.subject_id,
+        language=payload.language,
+        source=payload.source,
+        scopes=payload.scopes or None,
+        accepted=payload.accepted,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent", ""),
+    )
+    return {"status": "ok", "consent": consent.to_dict()}
+
+
+@app.post("/api/rodo/requests")
+def create_rodo_request(payload: DataSubjectRequestCreate) -> dict:
+    try:
+        data_request = get_rodo_service().create_data_subject_request(
+            subject_id=payload.subject_id,
+            request_type=payload.request_type,
+            contact=payload.contact,
+            language=payload.language,
+            note=payload.note,
+        )
+        return {"status": "ok", "request": data_request.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/admin/rodo/requests")
+def list_rodo_requests(request: Request) -> list[dict]:
+    _require_admin(request)
+    return [item.to_dict() for item in get_rodo_service().list_data_subject_requests()]
+
+
+@app.patch("/api/admin/rodo/requests/{request_id}")
+def update_rodo_request_status(
+    request_id: str,
+    payload: DataSubjectRequestStatusUpdate,
+    request: Request,
+) -> dict:
+    _require_admin(request)
+    try:
+        data_request = get_rodo_service().update_data_subject_request_status(
+            request_id=request_id,
+            status=payload.status,
+            note=payload.note,
+        )
+        return {"status": "ok", "request": data_request.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/admin/rodo/export/{subject_id}")
+def export_rodo_subject_data(subject_id: str, request: Request) -> dict:
+    _require_admin(request)
+    return get_rodo_service().export_subject_data(subject_id)
 
 
 @app.get("/{language_code}", response_class=HTMLResponse)

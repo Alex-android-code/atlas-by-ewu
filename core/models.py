@@ -283,6 +283,32 @@ class UserPreference(SerializableModel):
 
 
 @dataclass
+class ConsentRecord(SerializableModel):
+    subject_id: str
+    consent_version: str
+    language: str
+    source: str
+    scopes: list[str] = field(default_factory=list)
+    accepted: bool = True
+    id: str = field(default_factory=lambda: new_id("CNS"))
+    accepted_at: str = field(default_factory=utc_now_iso)
+    revoked_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DataSubjectRequest(SerializableModel):
+    subject_id: str
+    request_type: str
+    contact: str
+    status: str = "pending"
+    id: str = field(default_factory=lambda: new_id("DSR"))
+    requested_at: str = field(default_factory=utc_now_iso)
+    completed_at: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class Subscription(SerializableModel):
     user_id: str
     plan: str = "start"

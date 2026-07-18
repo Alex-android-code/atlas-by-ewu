@@ -94,6 +94,27 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ConsentCreate(BaseModel):
+    subject_id: str
+    language: str = "uk"
+    source: str = "web"
+    scopes: list[str] = Field(default_factory=list)
+    accepted: bool = True
+
+
+class DataSubjectRequestCreate(BaseModel):
+    subject_id: str
+    request_type: str
+    contact: str
+    language: str = "uk"
+    note: str = ""
+
+
+class DataSubjectRequestStatusUpdate(BaseModel):
+    status: str
+    note: str = ""
+
+
 class AgentOnboardingAnswer(BaseModel):
     user_id: str
     field: str

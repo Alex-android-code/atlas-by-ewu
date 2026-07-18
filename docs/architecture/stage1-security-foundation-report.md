@@ -49,6 +49,13 @@ Status: in progress. This report covers the first security fixes implemented aft
 10. Added tests for Telegram webhook payload limits.
    - `tests/test_ewu_bot_webhook_security.py`
 
+11. Added initial RODO/GDPR foundation.
+   - Consent records.
+   - Data subject request records.
+   - Public privacy notice endpoint.
+   - Public request intake for export/delete/rectification/restriction.
+   - Admin-only request list, status update, and subject data export.
+
 ## Required Environment Variables
 
 Production should define one of these:
@@ -89,6 +96,7 @@ Result:
 - Add CSRF protection for dashboard mutations.
 - Add failed-login audit events.
 - Move JSON storage to PostgreSQL or add interim file locking.
-- Add RODO consent/export/delete workflows.
+- Connect RODO consent prompts into Telegram and web UX.
+- Add verified destructive deletion workflow.
 - Add backup automation for Render persistent disk.
 - Add dependency and secret scanning in CI.

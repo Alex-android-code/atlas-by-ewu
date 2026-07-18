@@ -52,6 +52,7 @@ class AdminSecurityTests(unittest.TestCase):
             app_module.list_vacancies,
             app_module.list_matches,
             app_module.list_activity,
+            app_module.list_rodo_requests,
         )
 
         for handler in protected_handlers:
@@ -59,6 +60,10 @@ class AdminSecurityTests(unittest.TestCase):
                 with self.assertRaises(HTTPException) as ctx:
                     handler(request())
                 self.assertEqual(ctx.exception.status_code, 403)
+
+        with self.assertRaises(HTTPException) as ctx:
+            app_module.export_rodo_subject_data("user-1", request())
+        self.assertEqual(ctx.exception.status_code, 403)
 
     def test_admin_login_rate_limit_blocks_repeated_attempts(self):
         for _ in range(app_module.ADMIN_LOGIN_LIMIT_PER_MINUTE):

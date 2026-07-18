@@ -11,18 +11,22 @@ from database.repositories import (
     CandidateRepository,
     ActivityRepository,
     CareerGoalRepository,
+    ConsentRepository,
+    DataSubjectRequestRepository,
     DocumentRepository,
     EmployerRepository,
     MatchRepository,
     OpportunityRepository,
     ProfessionalDNARepository,
     SubscriptionRepository,
+    UserRepository,
     UserPreferenceRepository,
     VacancyRepository,
 )
 from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
 from services.country_config_loader import CountryConfigLoader
+from services.rodo_service import RodoService
 from workflows.operations_workflow import OperationsWorkflow
 
 
@@ -67,4 +71,15 @@ def get_agent_profile_service() -> AgentProfileService:
         goals=CareerGoalRepository(database),
         preferences=UserPreferenceRepository(database),
         subscriptions=SubscriptionRepository(database),
+    )
+
+
+def get_rodo_service() -> RodoService:
+    database = get_database()
+    return RodoService(
+        consents=ConsentRepository(database),
+        data_subject_requests=DataSubjectRequestRepository(database),
+        candidates=CandidateRepository(database),
+        employers=EmployerRepository(database),
+        users=UserRepository(database),
     )

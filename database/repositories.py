@@ -10,6 +10,8 @@ from core.models import (
     AgentRecommendation,
     Candidate,
     CareerGoal,
+    ConsentRecord,
+    DataSubjectRequest,
     Document,
     Employer,
     Match,
@@ -145,6 +147,16 @@ class OpportunityRepository(JsonRepository[Opportunity]):
 class UserPreferenceRepository(JsonRepository[UserPreference]):
     collection = "user_preferences"
     model_class = UserPreference
+
+
+class ConsentRepository(JsonRepository[ConsentRecord]):
+    collection = "consents"
+    model_class = ConsentRecord
+
+
+class DataSubjectRequestRepository(JsonRepository[DataSubjectRequest]):
+    collection = "data_subject_requests"
+    model_class = DataSubjectRequest
 
 
 class SubscriptionRepository(JsonRepository[Subscription]):
