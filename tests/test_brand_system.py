@@ -60,3 +60,13 @@ def test_brand_system_locks_core_identity():
     assert "Do not create a new logo concept" in doc
     assert "Earth" in doc
     assert "orbit" in doc
+
+
+def test_dashboard_exposes_candidate_photo_workflow():
+    dashboard = (ROOT / "api" / "dashboard.py").read_text(encoding="utf-8")
+
+    assert "Фото для карты кандидата" in dashboard
+    assert "candidate-photo-preview" in dashboard
+    assert "Карты кандидатов" in dashboard
+    assert "uploadCandidatePhoto" in dashboard
+    assert "/api/candidates/${encodeURIComponent(candidateId)}/photo" in dashboard

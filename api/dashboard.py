@@ -1130,6 +1130,93 @@ DASHBOARD_HTML = """
       font-size: 12px;
       margin-top: 3px;
     }
+    .candidate-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+      padding: 14px;
+    }
+    .candidate-card {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid rgba(238,241,246,0.09);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.038);
+    }
+    .candidate-photo, .candidate-photo-preview {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid rgba(212,175,55,0.26);
+      background:
+        radial-gradient(circle at 35% 24%, rgba(245,217,138,0.25), transparent 34%),
+        rgba(255,255,255,0.055);
+      color: var(--gold-soft);
+      font-weight: 820;
+      text-transform: uppercase;
+    }
+    .candidate-photo img, .candidate-photo-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .candidate-main {
+      display: grid;
+      gap: 8px;
+    }
+    .candidate-main strong {
+      display: block;
+      font-size: 15px;
+    }
+    .candidate-main span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .candidate-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .upload-action {
+      min-height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(212,175,55,0.34);
+      border-radius: 10px;
+      padding: 0 11px;
+      color: var(--gold-soft);
+      background: rgba(212,175,55,0.075);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 760;
+    }
+    .upload-action input {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+    .photo-upload {
+      border: 1px dashed rgba(212,175,55,0.36);
+      border-radius: 14px;
+      padding: 10px;
+      background: rgba(212,175,55,0.055);
+    }
+    .photo-upload-row {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
     details {
       margin-top: 16px;
       overflow: hidden;
@@ -1263,6 +1350,17 @@ DASHBOARD_HTML = """
       <div class="metric"><span>Контакт</span><strong id="m-contact">0</strong></div>
     </section>
 
+    <section class="panel" style="margin-bottom:16px">
+      <div class="panel-head">
+        <div>
+          <h2>Карты кандидатов</h2>
+          <div class="hint">Фото, статус и быстрые действия по профилю</div>
+        </div>
+        <span class="pill" id="candidate-card-count">0 карт</span>
+      </div>
+      <div class="candidate-list" id="candidate-list"></div>
+    </section>
+
     <section class="workspace">
       <div>
         <section class="panel">
@@ -1330,7 +1428,13 @@ DASHBOARD_HTML = """
           <label>Профессия<input name="profession_code" value="welder" required /></label>
           <label>Опыт, лет<input name="years_of_experience" type="number" value="4" min="0" /></label>
           <label>Языки<input name="languages" value="uk,pl" /></label>
-          <label>Фото профиля<input name="profile_photo" type="file" accept="image/jpeg,image/png,image/webp" /></label>
+          <label class="photo-upload">
+            Фото для карты кандидата
+            <div class="photo-upload-row">
+              <div class="candidate-photo-preview" id="candidate-photo-preview">Фото</div>
+              <input name="profile_photo" type="file" accept="image/jpeg,image/png,image/webp" />
+            </div>
+          </label>
           <button class="primary" type="submit">Создать кандидата</button>
         </form>
 
@@ -1424,11 +1528,56 @@ DASHBOARD_HTML = """
       $("m-risks").textContent = data.risky_cases.length;
       $("m-contact").textContent = data.manual_contact.length;
       renderAttention(data);
+      renderCandidates(data);
       renderEmployers(data.new_employers);
       renderVacancies(data.open_vacancies);
       renderEvents(data.event_feed || data.activity || []);
       renderNextStep(data);
       renderSelects();
+    }
+
+    function candidatePhoto(candidate) {
+      const photo = candidate.metadata?.profile_photo || {};
+      if (photo.url) {
+        return `<img src="${escapeHtml(photo.url)}" alt="Фото ${escapeHtml(candidate.first_name)} ${escapeHtml(candidate.last_name)}" loading="lazy" />`;
+      }
+      return escapeHtml(`${candidate.first_name || "A"}${candidate.last_name || ""}`.slice(0, 2));
+    }
+
+    function uniqueCandidates(data) {
+      const byId = new Map();
+      [...(data.new_candidates || []), ...(data.manual_contact || [])].forEach(candidate => {
+        byId.set(candidate.id, candidate);
+      });
+      return Array.from(byId.values());
+    }
+
+    function renderCandidates(data) {
+      const candidates = uniqueCandidates(data);
+      $("candidate-card-count").textContent = `${candidates.length} карт`;
+      const list = $("candidate-list");
+      if (!candidates.length) {
+        list.innerHTML = `<div class="empty">Кандидатов пока нет. Создайте кандидата вручную или заполните заявку на сайте.</div>`;
+        return;
+      }
+      list.innerHTML = candidates.slice(0, 12).map(candidate => `
+        <article class="candidate-card">
+          <div class="candidate-photo">${candidatePhoto(candidate)}</div>
+          <div class="candidate-main">
+            <div>
+              <strong>${escapeHtml(candidate.first_name)} ${escapeHtml(candidate.last_name)}</strong>
+              <span>${escapeHtml(candidate.profession_code)} · ${escapeHtml(candidate.country_code)} · ${escapeHtml(candidate.status)}</span>
+            </div>
+            <div class="candidate-actions">
+              <label class="upload-action">
+                ${candidate.metadata?.profile_photo?.url ? "Заменить фото" : "Добавить фото"}
+                <input type="file" accept="image/jpeg,image/png,image/webp" onchange="uploadCandidatePhoto('${candidate.id}', this.files[0])" />
+              </label>
+              <button onclick="candidateStatus('${candidate.id}', 'ready_for_matching')">Готов</button>
+            </div>
+          </div>
+        </article>
+      `).join("");
     }
 
     function renderAttention(data) {
@@ -1593,6 +1742,13 @@ DASHBOARD_HTML = """
       await patchJson(`/api/candidates/${candidateId}/status`, {status, actor_id: "coordinator", note: `CRM: ${status}`});
       await loadAll();
     }
+    async function uploadCandidatePhoto(candidateId, file) {
+      if (!file) return;
+      setStatus(`Загружаю фото для ${candidateId}...`);
+      await uploadFile(`/api/candidates/${encodeURIComponent(candidateId)}/photo`, file);
+      await loadAll();
+      setStatus(`Фото прикреплено к карте кандидата: ${candidateId}`);
+    }
     async function verifyEmployer(employerId, verified) {
       await patchJson(`/api/employers/${employerId}/verify`, {verified, actor_id: "coordinator", note: "Verified from simplified CRM"});
       await loadAll();
@@ -1639,11 +1795,22 @@ DASHBOARD_HTML = """
       });
       if (photo instanceof File && photo.size > 0) {
         await uploadFile(`/api/candidates/${encodeURIComponent(result.candidate.id)}/photo`, photo);
+        await loadAll();
         setStatus(`Кандидат создан: ${result.candidate.id}. Фото прикреплено.`);
       } else {
+        await loadAll();
         setStatus(`Кандидат создан: ${result.candidate.id}`);
       }
-      await loadAll();
+    });
+    $("candidate-form").elements.profile_photo.addEventListener("change", event => {
+      const file = event.currentTarget.files[0];
+      const preview = $("candidate-photo-preview");
+      if (!file) {
+        preview.textContent = "Фото";
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = `<img src="${url}" alt="Предпросмотр фото кандидата" />`;
     });
     $("employer-form").addEventListener("submit", async event => {
       event.preventDefault();
