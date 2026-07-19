@@ -21,6 +21,7 @@ from api.dependencies import (
     get_agent_collaboration_service,
     get_competency_intelligence_service,
     get_corporate_ai_agent_service,
+    get_country_management_service,
     get_crm_service,
     get_development_recommendation_service,
     get_dynamic_interview_service,
@@ -33,7 +34,7 @@ from api.dependencies import (
 from api.employer import EMPLOYER_HTML as EMPLOYER_CHAT_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
 from api.login import LOGIN_HTML
-from api.main_interface import CORPORATE_HTML, EMPLOYEE_HTML, EMPLOYER_HTML, GDPR_HTML, LANDING_HTML
+from api.main_interface import CORPORATE_HTML, EMPLOYEE_HTML, EMPLOYER_HTML, GDPR_HTML, LANDING_HTML, country_detail_html
 from api.schemas import (
     AIChatRequest,
     AIMessageRequest,
@@ -42,6 +43,10 @@ from api.schemas import (
     AnalyticsEventCreate,
     CandidateCreate,
     ConsentCreate,
+    CountryCreate,
+    CountryStatusUpdate,
+    CountryUpdate,
+    CountryVisibilityUpdate,
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
     AgentCollaborationConsentGrantCreate,
@@ -175,6 +180,14 @@ def gdpr_page() -> str:
     return GDPR_HTML
 
 
+@app.get("/countries/{country_code}", response_class=HTMLResponse)
+def country_page(country_code: str) -> str:
+    country = get_country_management_service().get_public_country(country_code)
+    if country is None:
+        raise HTTPException(status_code=404, detail="Country not found")
+    return country_detail_html(country)
+
+
 @app.get("/ai", response_class=HTMLResponse)
 def ai_chat() -> str:
     return AI_CHAT_HTML
@@ -285,6 +298,20 @@ def api_logout(request: Request, response: Response) -> dict[str, str]:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "atlas_ewu"}
+
+
+@app.get("/api/public/countries")
+def list_public_countries() -> dict:
+    countries = get_country_management_service().public_countries()
+    return {"countries": countries, "count": len(countries)}
+
+
+@app.get("/api/public/countries/{country_id_or_code}")
+def get_public_country(country_id_or_code: str) -> dict:
+    country = get_country_management_service().get_public_country(country_id_or_code)
+    if country is None:
+        raise HTTPException(status_code=404, detail="Country not found")
+    return {"country": country}
 
 
 @app.get("/api/privacy/notice")
@@ -952,6 +979,109 @@ def get_admin_analytics(
 def get_first_vacancies_report(request: Request, limit: int = 5) -> list[dict]:
     _require_admin(request)
     return get_crm_service().first_vacancies_report(limit=limit)
+
+
+@app.get("/api/admin/countries")
+def admin_list_countries(request: Request) -> dict:
+    _require_admin(request)
+    countries = get_country_management_service().admin_countries()
+    return {"countries": countries, "count": len(countries)}
+
+
+@app.get("/api/admin/countries/{country_id_or_code}")
+def admin_get_country(country_id_or_code: str, request: Request) -> dict:
+    _require_admin(request)
+    country = get_country_management_service().get_admin_country(country_id_or_code)
+    if country is None:
+        raise HTTPException(status_code=404, detail="Country not found")
+    return {"country": country}
+
+
+@app.post("/api/admin/countries")
+def admin_create_country(payload: CountryCreate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        country = get_country_management_service().create_country(payload.model_dump())
+        return {"country": country.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/admin/countries/{country_id_or_code}")
+def admin_update_country(country_id_or_code: str, payload: CountryUpdate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        country = get_country_management_service().update_country(
+            country_id_or_code,
+            payload.model_dump(exclude_unset=True),
+        )
+        return {"country": country.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/admin/countries/{country_id_or_code}/status")
+def admin_set_country_status(country_id_or_code: str, payload: CountryStatusUpdate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        country = get_country_management_service().set_status(country_id_or_code, payload.status)
+        return {"country": country.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/admin/countries/{country_id_or_code}/visibility")
+def admin_set_country_visibility(country_id_or_code: str, payload: CountryVisibilityUpdate, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        country = get_country_management_service().set_visibility(country_id_or_code, payload.is_visible)
+        return {"country": country.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/admin/countries/{country_id_or_code}/flag")
+def admin_upload_country_flag(country_id_or_code: str, request: Request, file: UploadFile = File(...)) -> dict:
+    _require_admin(request)
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp", "image/svg+xml"}:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, SVG or WebP flags are allowed")
+    country = get_country_management_service().get_admin_country(country_id_or_code)
+    if country is None:
+        raise HTTPException(status_code=404, detail="Country not found")
+    suffix = Path(file.filename or "").suffix.lower()
+    extension = suffix if suffix in {".jpg", ".jpeg", ".png", ".webp", ".svg"} else ".png"
+    flag_dir = UPLOADS_DIR / "country_flags"
+    flag_dir.mkdir(parents=True, exist_ok=True)
+    target_name = f"{country['code'].lower()}{extension}"
+    target_path = flag_dir / target_name
+    max_bytes = 2 * 1024 * 1024
+    written = 0
+    with target_path.open("wb") as handle:
+        while True:
+            chunk = file.file.read(1024 * 512)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > max_bytes:
+                handle.close()
+                target_path.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="Flag is too large. Maximum size is 2 MB")
+            handle.write(chunk)
+    updated = get_country_management_service().update_country(
+        country_id_or_code,
+        {"flag_url": f"/uploads/country_flags/{target_name}"},
+    )
+    return {"country": updated.to_dict(), "flag_url": updated.flag_url}
+
+
+@app.delete("/api/admin/countries/{country_id_or_code}")
+def admin_archive_country(country_id_or_code: str, request: Request) -> dict:
+    _require_admin(request)
+    try:
+        country = get_country_management_service().archive_country(country_id_or_code)
+        return {"country": country.to_dict(), "archived": True}
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @app.get("/api/candidates")

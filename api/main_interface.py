@@ -306,6 +306,161 @@ h1 {
   color: var(--atlas-gold-soft);
   font-weight: 760;
 }
+.world-section {
+  padding: 20px clamp(14px, 4vw, 44px) 70px;
+}
+.world-inner {
+  width: min(1240px, 100%);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(280px, 0.55fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.world-copy {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: end;
+  border-top: 1px solid var(--atlas-line);
+  padding-top: 26px;
+}
+.world-copy h2 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 48px);
+}
+.world-copy p {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--atlas-muted);
+  line-height: 1.5;
+}
+.globe-card, .country-details {
+  border: 1px solid var(--atlas-line);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(0,96,192,0.16), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.035));
+  box-shadow: var(--atlas-shadow-md);
+}
+.globe-card {
+  min-height: 560px;
+  position: relative;
+  overflow: hidden;
+}
+.globe-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 18%, rgba(255,255,255,0.32) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 74% 22%, rgba(255,255,255,0.22) 0 1px, transparent 1.8px),
+    radial-gradient(circle at 62% 76%, rgba(255,255,255,0.2) 0 1px, transparent 1.8px);
+  opacity: 0.55;
+}
+.globe-canvas {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 560px;
+  display: block;
+  cursor: grab;
+}
+.globe-canvas:active { cursor: grabbing; }
+.globe-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-chip {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--atlas-line);
+  border-radius: 999px;
+  padding: 0 10px;
+  color: var(--atlas-muted);
+  background: rgba(5,7,13,0.72);
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+.status-chip::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--atlas-silver-600);
+}
+.status-chip.active::before { background: var(--atlas-gold-400); box-shadow: 0 0 14px rgba(255,192,64,0.5); }
+.status-chip.launching::before { background: var(--atlas-info); box-shadow: 0 0 14px rgba(56,189,248,0.34); }
+.status-chip.planned::before { background: var(--atlas-silver-500); }
+.country-details {
+  min-height: 560px;
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+.country-details h3 { margin: 0; font-size: 25px; }
+.country-flag {
+  width: 54px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid var(--atlas-line);
+  background: rgba(255,255,255,0.08);
+}
+.country-head {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.country-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.country-stat {
+  padding: 11px;
+  border: 1px solid rgba(238,241,246,0.1);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.04);
+}
+.country-stat span { display: block; color: var(--atlas-muted); font-size: 12px; }
+.country-stat strong { display: block; margin-top: 3px; color: var(--atlas-platinum); }
+.country-services {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.country-services span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(214,178,94,0.24);
+  border-radius: 999px;
+  padding: 0 9px;
+  color: var(--atlas-gold-soft);
+  background: rgba(214,178,94,0.065);
+  font-size: 12px;
+}
+.globe-fallback {
+  display: none;
+  position: absolute;
+  inset: 20px;
+  z-index: 3;
+  align-content: center;
+  gap: 10px;
+}
+.globe-card.fallback .globe-canvas { opacity: 0.18; }
+.globe-card.fallback .globe-fallback { display: grid; }
 .section-page {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -375,6 +530,8 @@ h1 {
   .role-card { min-height: 0; grid-template-columns: 180px 1fr; grid-template-rows: auto auto; }
   .role-card .role-cta { grid-column: 2; }
   .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .world-inner { grid-template-columns: 1fr; }
+  .globe-card, .country-details, .globe-canvas { min-height: 460px; }
 }
 @media (max-width: 760px) {
   .site-header { align-items: flex-start; flex-direction: column; gap: 10px; }
@@ -397,6 +554,11 @@ h1 {
   .section-hero { grid-template-columns: 1fr; }
   .section-hero-card { min-height: 190px; }
   .feature-grid { grid-template-columns: 1fr; }
+  .world-section { padding-bottom: 42px; }
+  .world-copy { display: grid; }
+  .globe-card, .country-details, .globe-canvas { min-height: 360px; }
+  .country-details { min-height: 0; }
+  .country-grid { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -499,6 +661,251 @@ SPLASH_CSS = """
 }
 """
 
+GLOBE_SCRIPT = """
+<script>
+  (function () {
+    const canvas = document.getElementById("atlas-globe");
+    const panel = document.getElementById("country-panel");
+    const fallback = document.getElementById("globe-fallback-list");
+    const globeCard = document.querySelector(".globe-card");
+    if (!canvas || !panel) return;
+
+    const ctx = canvas.getContext("2d");
+    const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const lowPower = window.innerWidth < 720 || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    let countries = [];
+    let markers = [];
+    let rotation = -18;
+    let selected = null;
+    let dragging = false;
+    let lastX = 0;
+
+    function supportsWebGL() {
+      try {
+        const test = document.createElement("canvas");
+        return Boolean(test.getContext("webgl") || test.getContext("experimental-webgl"));
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function resize() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(320, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(320, Math.floor(rect.height * ratio));
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      draw();
+    }
+
+    function statusLabel(status) {
+      return {active: "Active", launching: "Launching", planned: "Planned"}[status] || "Planned";
+    }
+
+    function statusColor(status) {
+      if (status === "active") return "#ffc040";
+      if (status === "launching") return "#38bdf8";
+      return "#d0d0d0";
+    }
+
+    function project(lat, lon, radius, centerX, centerY) {
+      const phi = lat * Math.PI / 180;
+      const theta = (lon + rotation) * Math.PI / 180;
+      const x = centerX + radius * Math.cos(phi) * Math.sin(theta);
+      const y = centerY - radius * Math.sin(phi) * 0.92;
+      const z = Math.cos(phi) * Math.cos(theta);
+      return {x, y, z};
+    }
+
+    function drawEarth(cx, cy, radius) {
+      const ocean = ctx.createRadialGradient(cx - radius * 0.28, cy - radius * 0.28, radius * 0.06, cx, cy, radius);
+      ocean.addColorStop(0, "#1d9bf0");
+      ocean.addColorStop(0.34, "#0050a0");
+      ocean.addColorStop(0.72, "#002050");
+      ocean.addColorStop(1, "#000010");
+      ctx.fillStyle = ocean;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.globalAlpha = 0.52;
+      ctx.fillStyle = "#103050";
+      for (let i = -2; i < 3; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(cx + i * radius * 0.42 + Math.sin(rotation / 30 + i) * 20, cy - radius * 0.1, radius * 0.28, radius * 0.1, -0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 0.42;
+      ctx.strokeStyle = "rgba(224,240,255,0.45)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, radius * (0.25 + i * 0.08), radius * 0.96, Math.PI / 2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      for (let i = -3; i <= 3; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + i * radius * 0.18, radius * 0.98, radius * 0.08, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (!lowPower) {
+        ctx.globalAlpha = 0.68;
+        ctx.fillStyle = "rgba(255,192,64,0.74)";
+        for (let i = 0; i < 56; i += 1) {
+          const a = (i * 47 + rotation * 1.5) * Math.PI / 180;
+          const rr = radius * (0.18 + (i % 9) * 0.075);
+          const px = cx + Math.cos(a) * rr;
+          const py = cy + Math.sin(a) * rr * 0.58;
+          ctx.fillRect(px, py, 1.4, 1.4);
+        }
+      }
+      ctx.restore();
+
+      const atmosphere = ctx.createRadialGradient(cx, cy, radius * 0.82, cx, cy, radius * 1.18);
+      atmosphere.addColorStop(0, "rgba(56,189,248,0)");
+      atmosphere.addColorStop(0.72, "rgba(56,189,248,0.18)");
+      atmosphere.addColorStop(1, "rgba(240,213,139,0.08)");
+      ctx.fillStyle = atmosphere;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawRoutes(cx, cy, radius) {
+      const active = markers.filter(item => item.country.status === "active" && item.z > -0.1);
+      if (active.length < 2 || lowPower) return;
+      ctx.save();
+      ctx.strokeStyle = "rgba(240,213,139,0.36)";
+      ctx.lineWidth = 1;
+      active.slice(0, 4).forEach((from, index) => {
+        const to = active[(index + 1) % active.length];
+        ctx.beginPath();
+        ctx.moveTo(from.x, from.y);
+        ctx.quadraticCurveTo(cx, cy - radius * 0.76, to.x, to.y);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    function drawMarkers(cx, cy, radius) {
+      markers = countries.map(country => ({country, ...project(Number(country.latitude), Number(country.longitude), radius, cx, cy)}));
+      drawRoutes(cx, cy, radius);
+      markers.forEach(marker => {
+        if (marker.z < -0.18) return;
+        const color = statusColor(marker.country.status);
+        const size = marker.country.id === selected ? 9 : 6;
+        ctx.globalAlpha = Math.max(0.35, marker.z);
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = marker.country.status === "active" ? 18 : 10;
+        ctx.beginPath();
+        ctx.arc(marker.x, marker.y, size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = "rgba(255,255,255,0.72)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      });
+    }
+
+    function draw() {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      ctx.clearRect(0, 0, width, height);
+      const cx = width / 2;
+      const cy = height / 2;
+      const radius = Math.min(width, height) * 0.34;
+      drawEarth(cx, cy, radius);
+      drawMarkers(cx, cy, radius);
+    }
+
+    function renderPanel(country) {
+      if (!country) {
+        panel.innerHTML = "<h3>Оберіть країну</h3><p class='lead'>Натисніть золотий або срібний маркер на глобусі, щоб побачити локальні можливості ATLAS.</p>";
+        return;
+      }
+      selected = country.id;
+      const services = (country.services || []).map(item => `<span>${escapeHtml(item)}</span>`).join("");
+      panel.innerHTML = `
+        <div class="country-head">
+          <img class="country-flag" src="${escapeHtml(country.flag_url || "/static/brand/atlas-symbol.png")}" alt="${escapeHtml(country.name)} flag" />
+          <div><h3>${escapeHtml(country.name)}</h3><span class="status-chip ${escapeHtml(country.status)}">${statusLabel(country.status)}</span></div>
+        </div>
+        <div class="country-grid">
+          <div class="country-stat"><span>Активні вакансії</span><strong>${country.vacancies_count || 0}</strong></div>
+          <div class="country-stat"><span>Кандидати</span><strong>${country.candidates_count || 0}</strong></div>
+          <div class="country-stat"><span>Мови</span><strong>${escapeHtml((country.languages || []).join(", ") || "-")}</strong></div>
+          <div class="country-stat"><span>Валюта</span><strong>${escapeHtml(country.currency || "-")}</strong></div>
+          <div class="country-stat"><span>Легалізація</span><strong>${country.legalization_available ? "Так" : "Ні"}</strong></div>
+          <div class="country-stat"><span>Навчання</span><strong>${country.training_available ? "Так" : "Ні"}</strong></div>
+        </div>
+        <div><strong>Сервіси</strong><div class="country-services">${services || "<span>ATLAS onboarding</span>"}</div></div>
+        <div class="country-stat"><span>Партнери ATLAS</span><strong>${escapeHtml((country.partners || []).join(", ") || "EWU network")}</strong></div>
+        <a class="button primary" href="${escapeHtml(country.route || "/employee")}">Перейти до національного розділу</a>
+      `;
+      draw();
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      }[char]));
+    }
+
+    function handleClick(event) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const hit = markers
+        .filter(marker => marker.z > -0.18)
+        .find(marker => Math.hypot(marker.x - x, marker.y - y) < 18);
+      if (hit) renderPanel(hit.country);
+    }
+
+    function animate() {
+      if (!reduceMotion && !dragging) rotation += 0.045;
+      draw();
+      requestAnimationFrame(animate);
+    }
+
+    async function loadCountries() {
+      try {
+        const response = await fetch("/api/public/countries", {cache: "no-store"});
+        const data = await response.json();
+        countries = data.countries || [];
+        fallback.innerHTML = countries.map(country => `<button class="button" type="button" data-country="${escapeHtml(country.id)}">${escapeHtml(country.name)} · ${statusLabel(country.status)}</button>`).join("");
+        fallback.querySelectorAll("[data-country]").forEach(button => {
+          button.addEventListener("click", () => renderPanel(countries.find(country => country.id === button.dataset.country)));
+        });
+        renderPanel(countries[0]);
+      } catch (error) {
+        globeCard.classList.add("fallback");
+        fallback.innerHTML = "<div class='country-stat'><strong>Country data unavailable</strong><span>Try refreshing the page.</span></div>";
+      }
+    }
+
+    if (!ctx || !supportsWebGL()) globeCard.classList.add("fallback");
+    canvas.addEventListener("click", handleClick);
+    canvas.addEventListener("pointerdown", event => { dragging = true; lastX = event.clientX; canvas.setPointerCapture(event.pointerId); });
+    canvas.addEventListener("pointermove", event => {
+      if (!dragging) return;
+      rotation += (event.clientX - lastX) * 0.25;
+      lastX = event.clientX;
+      draw();
+    });
+    canvas.addEventListener("pointerup", () => { dragging = false; });
+    window.addEventListener("resize", resize);
+    resize();
+    loadCountries().then(() => requestAnimationFrame(animate));
+  })();
+</script>
+"""
+
 
 def _header(active: str = "") -> str:
     nav = [
@@ -595,7 +1002,32 @@ LANDING_HTML = _html(
       {"".join(_role_card(card) for card in ROLE_CARDS)}
     </div>
   </section>
+  <section class="world-section" aria-labelledby="world-title">
+    <div class="world-inner">
+      <div class="world-copy">
+        <div>
+          <span class="eyebrow">Global AI ecosystem</span>
+          <h2 id="world-title">ATLAS у світі</h2>
+          <p>Країни підключення ATLAS, статус запуску, локальні сервіси, вакансії, кандидати, партнери, легалізаційна підтримка та навчальні програми.</p>
+        </div>
+      </div>
+      <div class="globe-card">
+        <canvas class="globe-canvas" id="atlas-globe" aria-label="Інтерактивний 3D-глобус ATLAS"></canvas>
+        <div class="globe-legend" aria-hidden="true">
+          <span class="status-chip active">Active</span>
+          <span class="status-chip launching">Launching</span>
+          <span class="status-chip planned">Planned</span>
+        </div>
+        <div class="globe-fallback" id="globe-fallback-list"></div>
+      </div>
+      <aside class="country-details" id="country-panel">
+        <h3>Оберіть країну</h3>
+        <p class="lead">Дані країн завантажуються з API ATLAS.</p>
+      </aside>
+    </div>
+  </section>
 </main>
+{GLOBE_SCRIPT}
 <script>
   (function () {{
     const splash = document.getElementById("splash");
@@ -729,3 +1161,38 @@ GDPR_HTML = _html(
     "gdpr",
     "gdpr",
 )
+
+
+def country_detail_html(country: dict) -> str:
+    services = country.get("services") or []
+    partners = country.get("partners") or []
+    return _html(
+        f"ATLAS | {country.get('name', country.get('code', 'Country'))}",
+        f"""
+<main class="section-page">
+  <section class="section-hero">
+    <div class="hero-copy">
+      <span class="eyebrow">{escape(str(country.get("status", "planned")).title())}</span>
+      <h1>{escape(str(country.get("name", country.get("code", "Country"))))}</h1>
+      <p class="lead">{escape(str(country.get("seo_description") or "Національний розділ ATLAS із локальними сервісами, вакансіями, партнерами та підтримкою."))}</p>
+      <div class="page-actions">
+        <a class="button primary" href="/employee">Для працівника</a>
+        <a class="button" href="/employer">Для роботодавця</a>
+      </div>
+    </div>
+    <div class="section-hero-card" aria-hidden="true"></div>
+  </section>
+  <section class="feature-grid" aria-label="Country details">
+    <article class="feature-card"><span>01</span><strong>Вакансії: {int(country.get("vacancies_count") or 0)}</strong></article>
+    <article class="feature-card"><span>02</span><strong>Кандидати: {int(country.get("candidates_count") or 0)}</strong></article>
+    <article class="feature-card"><span>03</span><strong>Мови: {escape(", ".join(country.get("languages") or []) or "-")}</strong></article>
+    <article class="feature-card"><span>04</span><strong>Валюта: {escape(str(country.get("currency") or "-"))}</strong></article>
+    <article class="feature-card"><span>05</span><strong>Легалізація: {"Так" if country.get("legalization_available") else "Ні"}</strong></article>
+    <article class="feature-card"><span>06</span><strong>Навчання: {"Так" if country.get("training_available") else "Ні"}</strong></article>
+    <article class="feature-card"><span>07</span><strong>Сервіси: {escape(", ".join(services) or "ATLAS onboarding")}</strong></article>
+    <article class="feature-card"><span>08</span><strong>Партнери: {escape(", ".join(partners) or "EWU network")}</strong></article>
+  </section>
+</main>
+""",
+        "country",
+    )

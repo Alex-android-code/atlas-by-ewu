@@ -75,10 +75,30 @@ class User(SerializableModel):
 class Country(SerializableModel):
     code: str
     name: str
-    currency: str
-    languages: list[str]
+    currency: str = ""
+    languages: list[str] = field(default_factory=list)
+    localized_names: dict[str, str] = field(default_factory=dict)
+    flag_url: str = ""
+    latitude: float = 0.0
+    longitude: float = 0.0
+    status: str = "planned"
+    services: list[str] = field(default_factory=list)
+    legalization_available: bool = False
+    training_available: bool = False
+    partners: list[str] = field(default_factory=list)
+    vacancies_count: int = 0
+    candidates_count: int = 0
+    regional_admin_id: str | None = None
+    route: str = ""
+    is_visible: bool = True
+    display_order: int = 100
+    seo_title: str = ""
+    seo_description: str = ""
     emergency_number: str | None = None
     config: dict[str, Any] = field(default_factory=dict)
+    id: str = field(default_factory=lambda: new_id("CTR"))
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
 
 
 @dataclass

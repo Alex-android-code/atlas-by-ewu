@@ -43,6 +43,64 @@ class VacancyCreate(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class CountryCreate(BaseModel):
+    code: str
+    name: str
+    localized_names: dict[str, str] = Field(default_factory=dict)
+    flag_url: str = ""
+    latitude: float = 0.0
+    longitude: float = 0.0
+    status: str = "planned"
+    languages: list[str] = Field(default_factory=list)
+    currency: str = ""
+    services: list[str] = Field(default_factory=list)
+    legalization_available: bool = False
+    training_available: bool = False
+    partners: list[str] = Field(default_factory=list)
+    vacancies_count: int = 0
+    candidates_count: int = 0
+    regional_admin_id: str | None = None
+    route: str = ""
+    is_visible: bool = True
+    display_order: int = 100
+    seo_title: str = ""
+    seo_description: str = ""
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class CountryUpdate(BaseModel):
+    code: str | None = None
+    name: str | None = None
+    localized_names: dict[str, str] | None = None
+    flag_url: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    status: str | None = None
+    languages: list[str] | None = None
+    currency: str | None = None
+    services: list[str] | None = None
+    legalization_available: bool | None = None
+    training_available: bool | None = None
+    partners: list[str] | None = None
+    vacancies_count: int | None = None
+    candidates_count: int | None = None
+    regional_admin_id: str | None = None
+    route: str | None = None
+    is_visible: bool | None = None
+    display_order: int | None = None
+    seo_title: str | None = None
+    seo_description: str | None = None
+    config: dict[str, Any] | None = None
+
+
+class CountryStatusUpdate(BaseModel):
+    status: str
+
+
+class CountryVisibilityUpdate(BaseModel):
+    is_visible: bool
+
+
 class MatchRequest(BaseModel):
     minimum_score: int = 60
 

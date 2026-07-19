@@ -16,6 +16,7 @@ from database.repositories import (
     CareerGoalRepository,
     CompetencyRepository,
     ConsentRepository,
+    CountryRepository,
     CorporateDepartmentRepository,
     CorporateEmployeeProfileRepository,
     CorporatePositionRepository,
@@ -54,6 +55,7 @@ from services.agent_profile_service import AgentProfileService
 from services.agent_collaboration import AgentCollaborationRepositories, AgentCollaborationService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
+from services.country_management import CountryManagementService
 from services.corporate_ai import CorporateAIAgentService, CorporateAIRepositories
 from services.development_recommendations import (
     DevelopmentRecommendationRepositories,
@@ -119,6 +121,16 @@ def get_rodo_service() -> RodoService:
         candidates=CandidateRepository(database),
         employers=EmployerRepository(database),
         users=UserRepository(database),
+    )
+
+
+def get_country_management_service() -> CountryManagementService:
+    database = get_database()
+    return CountryManagementService(
+        countries=CountryRepository(database),
+        candidates=CandidateRepository(database),
+        vacancies=VacancyRepository(database),
+        config_loader=CountryConfigLoader(),
     )
 
 

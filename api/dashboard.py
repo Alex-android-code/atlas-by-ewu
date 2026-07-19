@@ -1466,6 +1466,41 @@ DASHBOARD_HTML = """
       </div>
     </details>
 
+    <section class="panel" style="margin-top:16px">
+      <div class="panel-head">
+        <div>
+          <h2>Country Management</h2>
+          <div class="hint">Країни для інтерактивного глобуса ATLAS</div>
+        </div>
+        <button onclick="loadCountries()">Оновити країни</button>
+      </div>
+      <div class="forms" style="grid-template-columns: minmax(280px, .8fr) minmax(320px, 1.2fr)">
+        <form id="country-form">
+          <strong>Додати або редагувати країну</strong>
+          <input type="hidden" name="id" />
+          <label>Код ISO<input name="code" value="IT" maxlength="2" required /></label>
+          <label>Назва<input name="name" value="Italy" required /></label>
+          <label>Прапор URL<input name="flag_url" value="https://flagcdn.com/w80/it.png" /></label>
+          <label>Latitude<input name="latitude" type="number" step="0.0001" value="41.8719" /></label>
+          <label>Longitude<input name="longitude" type="number" step="0.0001" value="12.5674" /></label>
+          <label>Status<select name="status"><option value="active">Active</option><option value="launching">Launching</option><option value="planned">Planned</option></select></label>
+          <label>Languages<input name="languages" value="it,en" /></label>
+          <label>Currency<input name="currency" value="EUR" /></label>
+          <label>Services<input name="services" value="recruitment,candidate_profile,document_support" /></label>
+          <label>Legalization<select name="legalization_available"><option value="true">Так</option><option value="false">Ні</option></select></label>
+          <label>Training<select name="training_available"><option value="true">Так</option><option value="false">Ні</option></select></label>
+          <label>Partners<input name="partners" value="EWU network" /></label>
+          <label>Regional admin ID<input name="regional_admin_id" value="" /></label>
+          <label>Route<input name="route" value="/countries/it" /></label>
+          <label>Display order<input name="display_order" type="number" value="60" /></label>
+          <label>SEO title<input name="seo_title" value="ATLAS Italy" /></label>
+          <label>SEO description<input name="seo_description" value="ATLAS workforce services in Italy." /></label>
+          <button class="primary" type="submit">Зберегти країну</button>
+        </form>
+        <div class="list" id="country-management-list"></div>
+      </div>
+    </section>
+
     <section class="status-line" id="status-line">Готово.</section>
   </main>
   {{OBSERVABILITY_BODY}}
@@ -1504,6 +1539,12 @@ DASHBOARD_HTML = """
       if (!response.ok) throw new Error(data.detail || "Upload failed");
       return data;
     }
+    async function deleteJson(url) {
+      const response = await fetch(url, {method: "DELETE"});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Delete failed");
+      return data;
+    }
 
     async function loadAll() {
       setStatus("Обновляю CRM...");
@@ -1534,6 +1575,7 @@ DASHBOARD_HTML = """
       renderEvents(data.event_feed || data.activity || []);
       renderNextStep(data);
       renderSelects();
+      loadCountries();
     }
 
     function candidatePhoto(candidate) {
@@ -1730,6 +1772,101 @@ DASHBOARD_HTML = """
         : `<option value="">Сначала создайте работодателя</option>`;
     }
 
+    async function loadCountries() {
+      const response = await fetch("/api/admin/countries");
+      if (!response.ok) return;
+      const data = await response.json();
+      const list = $("country-management-list");
+      const countries = data.countries || [];
+      if (!countries.length) {
+        list.innerHTML = `<div class="empty">Країн поки немає.</div>`;
+        return;
+      }
+      list.innerHTML = countries.map(country => `
+        <div class="row">
+          <div>
+            <strong>${escapeHtml(country.name)} · ${escapeHtml(country.code)}</strong>
+            <span>${escapeHtml(country.status)} · ${country.is_visible ? "visible" : "hidden"} · ${escapeHtml((country.languages || []).join(", "))}</span>
+          </div>
+          <div class="task-actions">
+            <button onclick="editCountry('${country.id}')">Edit</button>
+            <button onclick="countryStatus('${country.id}', '${country.status === "active" ? "planned" : "active"}')">${country.status === "active" ? "Plan" : "Active"}</button>
+            <button onclick="countryVisibility('${country.id}', ${country.is_visible ? "false" : "true"})">${country.is_visible ? "Hide" : "Show"}</button>
+            <button class="danger" onclick="archiveCountry('${country.id}')">Archive</button>
+          </div>
+        </div>
+      `).join("");
+      window.__atlasCountries = countries;
+    }
+
+    function countryPayload(form) {
+      const data = Object.fromEntries(new FormData(form).entries());
+      return {
+        code: data.code.toUpperCase(),
+        name: data.name,
+        flag_url: data.flag_url,
+        latitude: Number(data.latitude || 0),
+        longitude: Number(data.longitude || 0),
+        status: data.status,
+        languages: splitList(data.languages),
+        currency: data.currency,
+        services: splitList(data.services),
+        legalization_available: data.legalization_available === "true",
+        training_available: data.training_available === "true",
+        partners: splitList(data.partners),
+        regional_admin_id: data.regional_admin_id || null,
+        route: data.route,
+        display_order: Number(data.display_order || 100),
+        seo_title: data.seo_title,
+        seo_description: data.seo_description
+      };
+    }
+
+    function editCountry(countryId) {
+      const country = (window.__atlasCountries || []).find(item => item.id === countryId);
+      if (!country) return;
+      const form = $("country-form");
+      form.elements.id.value = country.id;
+      Object.entries({
+        code: country.code,
+        name: country.name,
+        flag_url: country.flag_url,
+        latitude: country.latitude,
+        longitude: country.longitude,
+        status: country.status,
+        languages: (country.languages || []).join(","),
+        currency: country.currency,
+        services: (country.services || []).join(","),
+        legalization_available: String(Boolean(country.legalization_available)),
+        training_available: String(Boolean(country.training_available)),
+        partners: (country.partners || []).join(","),
+        regional_admin_id: country.regional_admin_id || "",
+        route: country.route,
+        display_order: country.display_order,
+        seo_title: country.seo_title,
+        seo_description: country.seo_description
+      }).forEach(([key, value]) => {
+        if (form.elements[key]) form.elements[key].value = value ?? "";
+      });
+      setStatus(`Редагування країни: ${country.code}`);
+    }
+
+    async function countryStatus(countryId, status) {
+      await patchJson(`/api/admin/countries/${countryId}/status`, {status});
+      await loadCountries();
+      setStatus(`Country status updated: ${status}`);
+    }
+    async function countryVisibility(countryId, is_visible) {
+      await patchJson(`/api/admin/countries/${countryId}/visibility`, {is_visible});
+      await loadCountries();
+      setStatus(`Country visibility updated.`);
+    }
+    async function archiveCountry(countryId) {
+      await deleteJson(`/api/admin/countries/${countryId}`);
+      await loadCountries();
+      setStatus(`Country archived.`);
+    }
+
     async function documentsReceived(candidateId) {
       await patchJson(`/api/candidates/${candidateId}/documents-received`, {
         status: "ready_for_matching",
@@ -1811,6 +1948,21 @@ DASHBOARD_HTML = """
       }
       const url = URL.createObjectURL(file);
       preview.innerHTML = `<img src="${url}" alt="Предпросмотр фото кандидата" />`;
+    });
+    $("country-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const countryId = new FormData(form).get("id");
+      const payload = countryPayload(form);
+      if (countryId) {
+        await patchJson(`/api/admin/countries/${countryId}`, payload);
+        setStatus(`Country updated: ${payload.code}`);
+      } else {
+        await postJson("/api/admin/countries", payload);
+        setStatus(`Country created: ${payload.code}`);
+      }
+      form.reset();
+      await loadCountries();
     });
     $("employer-form").addEventListener("submit", async event => {
       event.preventDefault();

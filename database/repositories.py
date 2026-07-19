@@ -20,6 +20,7 @@ from core.models import (
     CompetencyEvidence,
     CompetencyRelationship,
     ConsentRecord,
+    Country,
     CorporateDepartment,
     CorporateEmployeeProfile,
     CorporatePosition,
@@ -194,6 +195,11 @@ class ConsentRepository(JsonRepository[ConsentRecord]):
 class DataSubjectRequestRepository(JsonRepository[DataSubjectRequest]):
     collection = "data_subject_requests"
     model_class = DataSubjectRequest
+
+
+class CountryRepository(JsonRepository[Country]):
+    collection = "countries"
+    model_class = Country
 
 
 class SubscriptionRepository(JsonRepository[Subscription]):
