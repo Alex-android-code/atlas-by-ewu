@@ -313,11 +313,11 @@ h1 {
   padding: 20px clamp(14px, 4vw, 44px) 70px;
 }
 .world-inner {
-  width: min(1240px, 100%);
+  width: min(1540px, 100%);
   margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(280px, 0.55fr);
-  gap: 18px;
+  grid-template-columns: minmax(560px, 1.25fr) minmax(300px, 0.45fr);
+  gap: 20px;
   align-items: stretch;
 }
 .world-copy {
@@ -348,7 +348,7 @@ h1 {
   box-shadow: var(--atlas-shadow-md);
 }
 .globe-card {
-  min-height: 560px;
+  min-height: 860px;
   position: relative;
   overflow: hidden;
 }
@@ -367,7 +367,7 @@ h1 {
   z-index: 1;
   width: 100%;
   height: 100%;
-  min-height: 560px;
+  min-height: 860px;
   display: block;
   cursor: grab;
 }
@@ -549,7 +549,8 @@ h1 {
   .role-card .role-cta { grid-column: 2; }
   .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .world-inner { grid-template-columns: 1fr; }
-  .globe-card, .country-details, .globe-canvas { min-height: 460px; }
+  .globe-card, .globe-canvas { min-height: 700px; }
+  .country-details { min-height: 460px; }
 }
 @media (max-width: 760px) {
   .site-header { align-items: flex-start; flex-direction: column; gap: 10px; }
@@ -574,7 +575,8 @@ h1 {
   .feature-grid { grid-template-columns: 1fr; }
   .world-section { padding-bottom: 42px; }
   .world-copy { display: grid; }
-  .globe-card, .country-details, .globe-canvas { min-height: 360px; }
+  .globe-card, .globe-canvas { min-height: 560px; }
+  .country-details { min-height: 0; }
   .country-details { min-height: 0; }
   .country-grid { grid-template-columns: 1fr; }
 }
@@ -855,13 +857,13 @@ GLOBE_SCRIPT = """
         if (!path) return;
         const isAtlasCountry = countryByCode.has(shape.code);
         if (isAtlasCountry) {
-          ctx.globalAlpha = record.id === selected ? 0.38 : 0.2;
+          ctx.globalAlpha = record.id === selected ? 0.42 : 0.22;
           ctx.fillStyle = statusColor(record.status);
           ctx.fill(path);
         }
-        ctx.globalAlpha = isAtlasCountry ? 0.68 : 0.28;
-        ctx.strokeStyle = isAtlasCountry ? "rgba(255,214,125,0.82)" : "rgba(224,240,255,0.34)";
-        ctx.lineWidth = isAtlasCountry ? 1.25 : 0.65;
+        ctx.globalAlpha = isAtlasCountry ? 0.82 : 0.42;
+        ctx.strokeStyle = isAtlasCountry ? "rgba(255,214,125,0.9)" : "rgba(224,240,255,0.48)";
+        ctx.lineWidth = isAtlasCountry ? 1.55 : 0.9;
         ctx.stroke(path);
         lastCountryPaths.push({path, shape, country: record, isAtlasCountry});
       });
@@ -901,7 +903,7 @@ GLOBE_SCRIPT = """
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.globalCompositeOperation = compositeOperation || "source-over";
-      const step = lowPower ? 2 : 1;
+      const step = lowPower ? 2 : 0.75;
       for (let dx = -radius; dx <= radius; dx += step) {
         const nx = dx / radius;
         const z = Math.sqrt(Math.max(0, 1 - nx * nx));
@@ -981,7 +983,7 @@ GLOBE_SCRIPT = """
       ctx.clearRect(0, 0, width, height);
       const cx = width / 2;
       const cy = height / 2;
-      const radius = Math.min(width, height) * 0.34;
+      const radius = Math.min(width, height) * 0.48;
       drawEarth(cx, cy, radius);
       drawMarkers(cx, cy, radius);
     }
