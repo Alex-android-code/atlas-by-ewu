@@ -1331,8 +1331,8 @@ LANDING_HTML = """<!DOCTYPE html>
 <body>
     <div id="atlas-preloader">
         <video id="atlas-intro-video" autoplay muted playsinline preload="auto">
-            <source src="/static/video/atlas-intro.webm" type="video/webm">
-            <source src="/static/video/atlas-intro.mp4?v=20260719-cns" type="video/mp4">
+            <source src="/static/video/atlas-intro.webm?v=20260719-premium" type="video/webm">
+            <source src="/static/video/atlas-intro.mp4?v=20260719-premium" type="video/mp4">
             Ваш браузер не підтримує відтворення відео.
         </video>
     </div>
