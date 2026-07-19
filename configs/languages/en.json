@@ -498,5 +498,13 @@
   "main.country.partners": "ATLAS partners",
   "main.country.open": "Open national section",
   "main.country.unavailable": "Country data unavailable",
-  "main.country.refresh_hint": "Try refreshing the page."
+  "main.country.refresh_hint": "Try refreshing the page.",
+  "main.role_workspace.eyebrow": "ATLAS role workspace",
+  "main.role_page.employee.subtitle": "Personal space for profile, CV, job search, document checks and privacy control.",
+  "main.role_page.employer.subtitle": "Workspace for vacancies, AI candidate matching, recruitment funnel, documents, analytics and CRM.",
+  "main.role_page.corporate.subtitle": "Enterprise ATLAS for HRM, CRM, AI audit, workforce forecasting, automation, integrations and security.",
+  "main.role_page.employee.primary": "Create profile",
+  "main.role_page.employer.primary": "Start matching",
+  "main.role_page.corporate.primary": "Open Control Center",
+  "main.role_page.back": "Back to role selection"
 }

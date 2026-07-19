@@ -459,7 +459,7 @@
   "landing.support_insurance_item_3": "Control de preparaci\u00f3n antes del viaje",
   "main.nav.employee": "Trabajador",
   "main.nav.employer": "Empleador",
-  "main.nav.corporate": "Corporación",
+  "main.nav.corporate": "Corporaci\u00f3n",
   "main.nav.gdpr": "GDPR / RODO",
   "main.nav.language": "Idioma",
   "main.nav.crm_login": "Entrar en CRM",
@@ -485,7 +485,7 @@
   "main.status.active": "Active",
   "main.status.launching": "Launching",
   "main.status.planned": "Planned",
-  "main.country.choose_title": "Elige un país",
+  "main.country.choose_title": "Elige un pa\u00eds",
   "main.country.loading": "Country data is loaded from the ATLAS API.",
   "main.country.choose_lead": "Select a gold or silver marker on the globe to view local ATLAS opportunities.",
   "main.country.vacancies": "Active vacancies",
@@ -498,5 +498,13 @@
   "main.country.partners": "ATLAS partners",
   "main.country.open": "Open national section",
   "main.country.unavailable": "Country data unavailable",
-  "main.country.refresh_hint": "Try refreshing the page."
+  "main.country.refresh_hint": "Try refreshing the page.",
+  "main.role_workspace.eyebrow": "ATLAS role workspace",
+  "main.role_page.employee.subtitle": "Espacio personal para perfil, CV, búsqueda de empleo, revisión de documentos y privacidad.",
+  "main.role_page.employer.subtitle": "Espacio para vacantes, matching AI, embudo de reclutamiento, documentos, analítica y CRM.",
+  "main.role_page.corporate.subtitle": "ATLAS Enterprise para HRM, CRM, auditoría AI, previsión de personal, automatización, integraciones y seguridad.",
+  "main.role_page.employee.primary": "Crear perfil",
+  "main.role_page.employer.primary": "Iniciar matching",
+  "main.role_page.corporate.primary": "Abrir Control Center",
+  "main.role_page.back": "Volver a elegir rol"
 }

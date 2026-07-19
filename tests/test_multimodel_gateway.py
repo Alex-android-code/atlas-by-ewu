@@ -9,10 +9,11 @@ from ai.ai_gateway import AIProviderRegistry, MultiModelGateway
 from ai.cache import MemoryTTLCache, build_exact_cache_key
 from ai.constitutional_guard import ConstitutionalGuard
 from ai.escalation import JsonEscalationService
-from ai.models import MatchingEvaluation, ModelResult
+from ai.models import MatchingEvaluation, ModelResult, TaskType
 from ai.mock_provider import MockAIProvider
 from ai.privacy import build_safe_ai_context, mask_document_number, mask_email, mask_phone
 from ai.providers import OpenAIProvider
+from ai.router import ModelRouter
 from ai.structured_outputs import deterministic_top_n
 from ai.usage_tracker import UsageTracker
 
@@ -124,6 +125,27 @@ class MultiModelGatewayTests(unittest.IsolatedAsyncioTestCase):
         gateway = MultiModelGateway(registry=registry)
         await gateway.close()
         self.assertTrue(getattr(provider, "closed", False))
+
+    async def test_router_prefers_gemini_when_other_keys_are_missing(self):
+        previous = {name: os.environ.get(name) for name in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY")}
+        os.environ.pop("OPENAI_API_KEY", None)
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+        os.environ["GEMINI_API_KEY"] = "test-gemini"
+        try:
+            router = ModelRouter()
+            chat = router.route(task_type=TaskType.CHAT, role="candidate", message="hello", context={})
+            legal = router.route(task_type=TaskType.LEGAL_SENSITIVE, role="legal", message="passport issue", context={})
+            employer = router.route(task_type=TaskType.EMPLOYER_ANALYSIS, role="employer", message="b2b", context={})
+            self.assertEqual(chat.provider, "gemini")
+            self.assertEqual(legal.provider, "gemini")
+            self.assertEqual(employer.provider, "gemini")
+            self.assertEqual(chat.fallback_order[0], "gemini")
+        finally:
+            for name, value in previous.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
 
 
 class GuardPrivacyAndStructuredTests(unittest.TestCase):

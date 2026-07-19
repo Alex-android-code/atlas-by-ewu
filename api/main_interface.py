@@ -1134,12 +1134,12 @@ def role_page(title: str, subtitle: str, features: list[str], active: str, prima
 <main class="section-page">
   <section class="section-hero">
     <div class="hero-copy">
-      <span class="eyebrow">ATLAS role workspace</span>
-      <h1>{escape(title)}</h1>
-      <p class="lead">{escape(subtitle)}</p>
+      <span class="eyebrow" data-i18n="main.role_workspace.eyebrow">ATLAS role workspace</span>
+      <h1 data-i18n="main.role.{active}.title">{escape(title)}</h1>
+      <p class="lead" data-i18n="main.role_page.{active}.subtitle">{escape(subtitle)}</p>
       <div class="page-actions">
-        <a class="button primary" href="{primary_href}">{escape(primary_label)}</a>
-        <a class="button" href="/">Повернутись до вибору ролі</a>
+        <a class="button primary" href="{primary_href}" data-i18n="main.role_page.{active}.primary">{escape(primary_label)}</a>
+        <a class="button" href="/" data-i18n="main.role_page.back">Повернутись до вибору ролі</a>
       </div>
     </div>
     <div class="section-hero-card" aria-hidden="true"></div>

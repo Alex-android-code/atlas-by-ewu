@@ -45,10 +45,29 @@ class ModelRouter:
     def route(self, *, task_type: TaskType, role: str, message: str, context: dict[str, Any]) -> RoutingDecision:
         tokens = estimate_tokens(message) + estimate_tokens(str(context)[:4000])
         long_context = tokens >= int(os.getenv("AI_LONG_CONTEXT_THRESHOLD", "12000"))
+        openai_ready = bool(os.getenv("OPENAI_API_KEY"))
+        anthropic_ready = bool(os.getenv("ANTHROPIC_API_KEY"))
+        gemini_ready = bool(os.getenv("GEMINI_API_KEY"))
+
+        def choose(preferred: str, order: list[str]) -> tuple[str, str, list[str]]:
+            if preferred == "openai" and openai_ready:
+                return "openai", self.openai_model, order
+            if preferred == "anthropic" and anthropic_ready:
+                return "anthropic", self.anthropic_model, order
+            if preferred == "gemini" and gemini_ready:
+                return "gemini", self.gemini_model, order
+            if gemini_ready:
+                return "gemini", self.gemini_model, ["gemini", *[item for item in order if item != "gemini"]]
+            return preferred, {"openai": self.openai_model, "anthropic": self.anthropic_model, "gemini": self.gemini_model}.get(preferred, self.gemini_model), order
+
         if task_type in {TaskType.DOCUMENT_ANALYSIS, TaskType.SUMMARIZATION} or long_context:
-            return RoutingDecision("gemini", self.gemini_model, "large_context_or_document", self.max_output_tokens, 0.2, ["gemini", "anthropic", "openai", "mock"])
+            provider, model, order = choose("gemini", ["gemini", "anthropic", "openai", "mock"])
+            return RoutingDecision(provider, model, "large_context_or_document", self.max_output_tokens, 0.2, order)
         if task_type in {TaskType.MATCHING_FINAL, TaskType.EMPLOYER_ANALYSIS}:
-            return RoutingDecision("anthropic", self.anthropic_model, "complex_b2b_or_final_matching", self.max_output_tokens, 0.1, ["anthropic", "openai", "mock"])
+            provider, model, order = choose("anthropic", ["anthropic", "openai", "gemini", "mock"])
+            return RoutingDecision(provider, model, "complex_b2b_or_final_matching", self.max_output_tokens, 0.1, order)
         if task_type == TaskType.LEGAL_SENSITIVE:
-            return RoutingDecision("openai", self.openai_model, "sensitive_chat_with_human_guard", 450, 0.0, ["openai", "mock"])
-        return RoutingDecision("openai", self.openai_model, "general_dialogue", 600, 0.4, ["openai", "anthropic", "gemini", "mock"])
+            provider, model, order = choose("openai", ["openai", "gemini", "mock"])
+            return RoutingDecision(provider, model, "sensitive_chat_with_human_guard", 450, 0.0, order)
+        provider, model, order = choose("openai", ["openai", "anthropic", "gemini", "mock"])
+        return RoutingDecision(provider, model, "general_dialogue", 600, 0.4, order)
