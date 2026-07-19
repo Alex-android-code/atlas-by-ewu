@@ -30,10 +30,10 @@ from api.dependencies import (
     get_rodo_service,
     get_skill_gap_service,
 )
-from api.employer import EMPLOYER_HTML
+from api.employer import EMPLOYER_HTML as EMPLOYER_CHAT_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
-from api.landing import LANDING_HTML
 from api.login import LOGIN_HTML
+from api.main_interface import CORPORATE_HTML, EMPLOYEE_HTML, EMPLOYER_HTML, GDPR_HTML, LANDING_HTML
 from api.schemas import (
     AIChatRequest,
     AIMessageRequest,
@@ -160,6 +160,21 @@ def landing() -> str:
     return LANDING_HTML
 
 
+@app.get("/employee", response_class=HTMLResponse)
+def employee_page() -> str:
+    return EMPLOYEE_HTML
+
+
+@app.get("/corporate", response_class=HTMLResponse)
+def corporate_page() -> str:
+    return CORPORATE_HTML
+
+
+@app.get("/gdpr", response_class=HTMLResponse)
+def gdpr_page() -> str:
+    return GDPR_HTML
+
+
 @app.get("/ai", response_class=HTMLResponse)
 def ai_chat() -> str:
     return AI_CHAT_HTML
@@ -205,6 +220,11 @@ def employer_experience() -> str:
     return EMPLOYER_HTML
 
 
+@app.get("/employer/chat", response_class=HTMLResponse)
+def employer_chat_experience() -> str:
+    return EMPLOYER_CHAT_HTML
+
+
 @app.get("/{language_code}/employer", response_class=HTMLResponse)
 def localized_employer_experience(language_code: str) -> str:
     return EMPLOYER_HTML
@@ -212,6 +232,11 @@ def localized_employer_experience(language_code: str) -> str:
 
 @app.get("/login", response_class=HTMLResponse)
 def login() -> str:
+    return LOGIN_HTML
+
+
+@app.get("/crm/login", response_class=HTMLResponse)
+def crm_login() -> str:
     return LOGIN_HTML
 
 
