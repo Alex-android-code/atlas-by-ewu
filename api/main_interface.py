@@ -594,24 +594,47 @@ SPLASH_CSS = """
 .splash {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 9999;
   display: grid;
   place-items: center;
-  padding: 24px;
-  background:
-    radial-gradient(circle at 50% 34%, rgba(214,178,94,0.16), transparent 30%),
-    radial-gradient(circle at 50% 50%, rgba(0,96,192,0.18), transparent 38%),
-    #05070d;
-  transition: opacity 520ms ease, visibility 520ms ease;
+  overflow: hidden;
+  background: #020714;
+  transition: opacity 1500ms ease-in-out, visibility 1500ms ease-in-out;
 }
 .splash.done { opacity: 0; visibility: hidden; pointer-events: none; }
-.splash-inner { display: grid; justify-items: center; gap: 16px; text-align: center; }
+.splash-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #020714;
+}
+.splash-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(214,178,94,0.1), transparent 34%),
+    linear-gradient(180deg, rgba(2,7,20,0.08), rgba(2,7,20,0.38));
+  pointer-events: none;
+}
+.splash-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
 .splash-logo {
   position: relative;
-  width: min(360px, 78vw);
-  aspect-ratio: 1;
+  width: min(220px, 52vw);
+  aspect-ratio: 2.8 / 1;
   display: grid;
   place-items: center;
+  opacity: 0;
+  animation: titleIn 900ms ease 360ms forwards;
 }
 .splash-logo img {
   width: 100%;
@@ -623,8 +646,8 @@ SPLASH_CSS = """
 .splash-logo::after {
   content: "";
   position: absolute;
-  width: 82%;
-  height: 30%;
+  width: 84%;
+  height: 86%;
   border: 2px solid rgba(240,213,139,0.76);
   border-left-color: transparent;
   border-right-color: rgba(255,255,255,0.18);
@@ -645,6 +668,7 @@ SPLASH_CSS = """
   min-height: 22px;
   color: var(--atlas-muted);
   font-size: 14px;
+  text-shadow: 0 2px 20px rgba(0,0,0,0.75);
 }
 .splash-loader {
   width: min(240px, 62vw);
@@ -677,7 +701,8 @@ SPLASH_CSS = """
 }
 @media (prefers-reduced-motion: reduce) {
   .splash { transition: none; }
-  .splash-logo::after, .splash-logo img, .splash-title, .splash-loader span { animation: none !important; opacity: 1; }
+  .splash-video { display: none; }
+  .splash-logo::after, .splash-logo, .splash-logo img, .splash-title, .splash-loader span { animation: none !important; opacity: 1; }
 }
 """
 
@@ -1161,6 +1186,10 @@ LANDING_HTML = _html(
     "ATLAS by EWU",
     f"""
 <div class="splash" id="splash" aria-live="polite">
+  <video class="splash-video" id="atlas-intro-video" autoplay muted playsinline preload="auto" poster="/static/brand/atlas-logo-dark.png">
+    <source src="/static/assets/atlas-intro-preloader.mp4?v=20260719-video-preloader" type="video/mp4" />
+  </video>
+  <div class="splash-overlay" aria-hidden="true"></div>
   <div class="splash-inner">
     <div class="splash-logo">
       <img src="/static/brand/atlas-logo-primary.png?v=20260718-brand-system" alt="ATLAS by EWU" />
@@ -1212,11 +1241,14 @@ LANDING_HTML = _html(
   (function () {{
     const splash = document.getElementById("splash");
     if (!splash) return;
+    const introVideo = document.getElementById("atlas-intro-video");
     const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const firstVisit = !sessionStorage.getItem("atlasSplashSeen");
     if (!firstVisit || reduce) {{
       splash.classList.add("done");
+      splash.style.display = "none";
       sessionStorage.setItem("atlasSplashSeen", "1");
+      if (introVideo) introVideo.pause();
       return;
     }}
     const statuses = [
@@ -1231,17 +1263,31 @@ LANDING_HTML = _html(
       statusNode.textContent = window.AtlasI18n?.t(statuses[index][0], statuses[index][1]) || statuses[index][1];
     }}, 620);
     const started = performance.now();
+    let finished = false;
     const finish = () => {{
+      if (finished) return;
+      finished = true;
       const elapsed = performance.now() - started;
       window.setTimeout(() => {{
         window.clearInterval(interval);
         sessionStorage.setItem("atlasSplashSeen", "1");
         splash.classList.add("done");
+        window.setTimeout(() => {{
+          if (introVideo) {{
+            introVideo.pause();
+            introVideo.remove();
+          }}
+          splash.style.display = "none";
+        }}, 1500);
       }}, Math.max(0, 1850 - elapsed));
     }};
-    if (document.readyState === "complete") finish();
-    else window.addEventListener("load", finish, {{ once: true }});
-    window.setTimeout(finish, 2450);
+    if (introVideo) {{
+      introVideo.addEventListener("ended", finish, {{ once: true }});
+      introVideo.addEventListener("error", finish, {{ once: true }});
+      const playAttempt = introVideo.play();
+      if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(finish);
+    }}
+    window.setTimeout(finish, 6500);
   }})();
 </script>
 """,
