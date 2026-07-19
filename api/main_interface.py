@@ -679,6 +679,19 @@ GLOBE_SCRIPT = """
     let selected = null;
     let dragging = false;
     let lastX = 0;
+    const landMasses = [
+      [[72,-168],[69,-128],[55,-104],[50,-82],[35,-82],[16,-92],[8,-78],[-6,-76],[-18,-66],[-36,-62],[-55,-70],[-22,-45],[5,-50],[24,-81],[43,-70],[58,-92],[70,-135]],
+      [[36,-10],[58,8],[71,38],[62,75],[48,92],[31,80],[18,45],[4,38],[-18,30],[-34,20],[-35,4],[-18,-6],[8,-12]],
+      [[70,35],[62,72],[58,116],[48,146],[32,134],[20,104],[8,78],[22,58],[30,42],[44,30]],
+      [[30,34],[24,48],[15,57],[5,50],[-4,42],[-12,44],[-24,34],[-35,22],[-28,12],[-8,12],[12,22]],
+      [[-10,112],[-18,125],[-28,146],[-40,146],[-44,126],[-32,112]],
+      [[72,-52],[78,-20],[72,18],[62,0],[60,-38]],
+    ];
+    const lightCities = [
+      [52.5,13.4],[52.2,21.0],[50.4,30.5],[48.9,2.3],[51.5,-0.1],[41.9,12.5],[40.4,-3.7],[38.7,-9.1],
+      [41.0,29.0],[30.0,31.2],[25.2,55.3],[28.6,77.2],[35.7,139.7],[37.5,127.0],[31.2,121.5],[1.3,103.8],
+      [40.7,-74.0],[34.0,-118.2],[-23.5,-46.6],[-34.6,-58.4],[-33.9,151.2]
+    ];
 
     function supportsWebGL() {
       try {
@@ -718,10 +731,11 @@ GLOBE_SCRIPT = """
     }
 
     function drawEarth(cx, cy, radius) {
-      const ocean = ctx.createRadialGradient(cx - radius * 0.28, cy - radius * 0.28, radius * 0.06, cx, cy, radius);
-      ocean.addColorStop(0, "#1d9bf0");
-      ocean.addColorStop(0.34, "#0050a0");
-      ocean.addColorStop(0.72, "#002050");
+      const ocean = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.36, radius * 0.04, cx, cy, radius);
+      ocean.addColorStop(0, "#85d7ff");
+      ocean.addColorStop(0.18, "#1d9bf0");
+      ocean.addColorStop(0.45, "#0050a0");
+      ocean.addColorStop(0.74, "#002050");
       ocean.addColorStop(1, "#000010");
       ctx.fillStyle = ocean;
       ctx.beginPath();
@@ -732,40 +746,29 @@ GLOBE_SCRIPT = """
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.clip();
-      ctx.globalAlpha = 0.52;
-      ctx.fillStyle = "#103050";
-      for (let i = -2; i < 3; i += 1) {
-        ctx.beginPath();
-        ctx.ellipse(cx + i * radius * 0.42 + Math.sin(rotation / 30 + i) * 20, cy - radius * 0.1, radius * 0.28, radius * 0.1, -0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 0.42;
+      drawLandMasses(cx, cy, radius);
+      drawNightLights(cx, cy, radius);
+      drawCloudBands(cx, cy, radius);
+      ctx.globalAlpha = 0.24;
       ctx.strokeStyle = "rgba(224,240,255,0.45)";
       ctx.lineWidth = 1;
-      for (let i = 0; i < 9; i += 1) {
+      for (let i = 0; i < 7; i += 1) {
         ctx.beginPath();
-        ctx.ellipse(cx, cy, radius * (0.25 + i * 0.08), radius * 0.96, Math.PI / 2, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy, radius * (0.34 + i * 0.08), radius * 0.96, Math.PI / 2, 0, Math.PI * 2);
         ctx.stroke();
-      }
-      for (let i = -3; i <= 3; i += 1) {
-        ctx.beginPath();
-        ctx.ellipse(cx, cy + i * radius * 0.18, radius * 0.98, radius * 0.08, 0, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      if (!lowPower) {
-        ctx.globalAlpha = 0.68;
-        ctx.fillStyle = "rgba(255,192,64,0.74)";
-        for (let i = 0; i < 56; i += 1) {
-          const a = (i * 47 + rotation * 1.5) * Math.PI / 180;
-          const rr = radius * (0.18 + (i % 9) * 0.075);
-          const px = cx + Math.cos(a) * rr;
-          const py = cy + Math.sin(a) * rr * 0.58;
-          ctx.fillRect(px, py, 1.4, 1.4);
-        }
       }
       ctx.restore();
 
-      const atmosphere = ctx.createRadialGradient(cx, cy, radius * 0.82, cx, cy, radius * 1.18);
+      const shade = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.28, radius * 0.2, cx + radius * 0.24, cy + radius * 0.18, radius * 1.05);
+      shade.addColorStop(0, "rgba(255,255,255,0.2)");
+      shade.addColorStop(0.48, "rgba(255,255,255,0)");
+      shade.addColorStop(1, "rgba(0,0,16,0.62)");
+      ctx.fillStyle = shade;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      const atmosphere = ctx.createRadialGradient(cx, cy, radius * 0.8, cx, cy, radius * 1.22);
       atmosphere.addColorStop(0, "rgba(56,189,248,0)");
       atmosphere.addColorStop(0.72, "rgba(56,189,248,0.18)");
       atmosphere.addColorStop(1, "rgba(240,213,139,0.08)");
@@ -773,6 +776,68 @@ GLOBE_SCRIPT = """
       ctx.beginPath();
       ctx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    function drawLandMasses(cx, cy, radius) {
+      landMasses.forEach((points, index) => {
+        const projected = points.map(([lat, lon]) => project(lat, lon, radius, cx, cy)).filter(point => point.z > -0.22);
+        if (projected.length < 3) return;
+        const landGradient = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+        landGradient.addColorStop(0, index % 2 ? "#d5bb86" : "#7fa36c");
+        landGradient.addColorStop(0.52, index % 2 ? "#8d7446" : "#4e7b5c");
+        landGradient.addColorStop(1, "#234a48");
+        ctx.globalAlpha = 0.82;
+        ctx.fillStyle = landGradient;
+        ctx.strokeStyle = "rgba(224,240,255,0.24)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        projected.forEach((point, pointIndex) => {
+          if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+          else ctx.lineTo(point.x, point.y);
+        });
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function drawNightLights(cx, cy, radius) {
+      if (lowPower) return;
+      lightCities.forEach(([lat, lon]) => {
+        const point = project(lat, lon, radius, cx, cy);
+        if (point.z < -0.08) return;
+        const glow = Math.max(0.25, point.z);
+        ctx.globalAlpha = glow;
+        ctx.fillStyle = "rgba(255,192,64,0.86)";
+        ctx.shadowColor = "rgba(255,192,64,0.72)";
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, 1.6 + point.z * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    }
+
+    function drawCloudBands(cx, cy, radius) {
+      ctx.globalAlpha = 0.34;
+      ctx.strokeStyle = "rgba(238,241,246,0.78)";
+      ctx.lineWidth = 2;
+      for (let i = -3; i <= 3; i += 1) {
+        ctx.beginPath();
+        ctx.ellipse(
+          cx + Math.sin(rotation / 22 + i) * radius * 0.08,
+          cy + i * radius * 0.17,
+          radius * (0.44 + (Math.abs(i) % 2) * 0.16),
+          radius * 0.055,
+          -0.2 + i * 0.18,
+          0,
+          Math.PI * 2
+        );
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
     }
 
     function drawRoutes(cx, cy, radius) {
