@@ -793,7 +793,7 @@ GLOBE_SCRIPT = """
 
     function project(lat, lon, radius, centerX, centerY) {
       const phi = lat * Math.PI / 180;
-      const theta = (lon + rotation) * Math.PI / 180;
+      const theta = (lon - rotation) * Math.PI / 180;
       const x = centerX + radius * Math.cos(phi) * Math.sin(theta);
       const y = centerY - radius * Math.sin(phi) * 0.92;
       const z = Math.cos(phi) * Math.cos(theta);
