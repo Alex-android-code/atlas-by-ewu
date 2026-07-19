@@ -8,7 +8,7 @@ from pathlib import Path
 from time import time
 
 from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
@@ -88,6 +88,7 @@ from services.gemini_service import (
     normalize_language,
     sanitize_user_text,
 )
+from services.onboarding_file_storage import OnboardingFileStorage
 from services.intent_detector import IntentDetectorService
 from services.language_detector import LanguageDetectorService
 from services.language_policy import normalize_language_code
@@ -141,6 +142,7 @@ app.mount(
 UPLOADS_DIR = Path(os.getenv("ATLAS_DATA_DIR", "data")) / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+ONBOARDING_FILE_STORAGE = OnboardingFileStorage()
 app.include_router(ewu_bot_router)
 
 
@@ -715,6 +717,37 @@ def complete_agent_onboarding(payload: AgentOnboardingComplete) -> dict:
     crm_sync = _sync_agent_profile_to_crm(payload.user_id, professional_dna)
     result["crm_sync"] = crm_sync
     return result
+
+
+@app.post("/api/onboarding/profile-photo")
+def upload_onboarding_profile_photo(request: Request, file: UploadFile = File(...)) -> dict:
+    return _upload_onboarding_file(request, file, kind="profile_photo")
+
+
+@app.post("/api/onboarding/cv")
+def upload_onboarding_cv(request: Request, file: UploadFile = File(...)) -> dict:
+    return _upload_onboarding_file(request, file, kind="cv")
+
+
+@app.get("/api/onboarding/files/{file_id}")
+def get_onboarding_file(file_id: str, request: Request) -> FileResponse:
+    owner_id = _onboarding_owner_id(request)
+    try:
+        item = ONBOARDING_FILE_STORAGE.get(file_id, owner_id)
+        path = ONBOARDING_FILE_STORAGE.path_for(file_id, owner_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    return FileResponse(path, media_type=item.mime_type, filename=item.original_name)
+
+
+@app.delete("/api/onboarding/profile-photo/{file_id}")
+def delete_onboarding_profile_photo(file_id: str, request: Request) -> dict:
+    return _delete_onboarding_file(request, file_id, kind="profile_photo")
+
+
+@app.delete("/api/onboarding/cv/{file_id}")
+def delete_onboarding_cv(file_id: str, request: Request) -> dict:
+    return _delete_onboarding_file(request, file_id, kind="cv")
 
 
 @app.get("/api/agent/dashboard/{user_id}")
@@ -1342,6 +1375,42 @@ def _require_admin(request: Request) -> None:
     if _is_admin_authorized(request):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _upload_onboarding_file(request: Request, file: UploadFile, kind: str) -> dict:
+    owner_id = _onboarding_owner_id(request)
+    try:
+        stored = ONBOARDING_FILE_STORAGE.save(
+            owner_id=owner_id,
+            kind=kind,
+            filename=file.filename,
+            mime_type=file.content_type,
+            stream=file.file,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"success": True, "file": stored.to_dict()}
+
+
+def _delete_onboarding_file(request: Request, file_id: str, kind: str) -> dict:
+    owner_id = _onboarding_owner_id(request)
+    try:
+        ONBOARDING_FILE_STORAGE.delete(file_id, owner_id, kind=kind)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    return {"success": True, "deleted": file_id}
+
+
+def _onboarding_owner_id(request: Request) -> str:
+    candidate = (
+        request.headers.get("x-atlas-user-id")
+        or request.cookies.get("atlas_user_id")
+        or request.headers.get("x-forwarded-user")
+    )
+    if candidate:
+        return "".join(char for char in candidate if char.isalnum() or char in ("-", "_"))[:96] or "anonymous"
+    client_host = request.client.host if request.client else "anonymous"
+    return f"anonymous-{client_host}"
 
 
 def _safe_photo_extension(filename: str | None, content_type: str | None) -> str:

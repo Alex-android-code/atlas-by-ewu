@@ -126,6 +126,135 @@ AGENT_ONBOARDING_HTML = r"""
       border-color: rgba(212,175,55,0.68);
       box-shadow: 0 0 0 4px rgba(212,175,55,0.12);
     }
+    .hidden { display: none !important; }
+    .upload-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(212,175,55,0.34);
+      border-radius: 24px;
+      padding: clamp(18px, 4vw, 28px);
+      background:
+        radial-gradient(circle at 16% 10%, rgba(212,175,55,0.18), transparent 30%),
+        linear-gradient(180deg, rgba(255,255,255,0.08), rgba(2,7,20,0.78));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 22px 60px rgba(0,0,0,0.24);
+      transition: border-color 180ms ease, transform 180ms ease, background 180ms ease;
+    }
+    .upload-card:hover, .upload-card.drag-over {
+      border-color: rgba(245,213,106,0.82);
+      transform: translateY(-1px);
+      background:
+        radial-gradient(circle at 16% 10%, rgba(212,175,55,0.26), transparent 34%),
+        linear-gradient(180deg, rgba(255,255,255,0.1), rgba(2,7,20,0.76));
+    }
+    .upload-drop {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: center;
+      min-height: 156px;
+      cursor: pointer;
+      outline: none;
+    }
+    .upload-drop:focus-visible {
+      box-shadow: 0 0 0 4px rgba(212,175,55,0.18);
+      border-radius: 18px;
+    }
+    .upload-icon {
+      width: 82px;
+      height: 82px;
+      border-radius: 22px;
+      display: grid;
+      place-items: center;
+      color: #130f05;
+      background: linear-gradient(135deg, #ffe27a, #d4af37 54%, #9f7e22);
+      font-size: 34px;
+      box-shadow: 0 18px 42px rgba(212,175,55,0.24);
+    }
+    .upload-title {
+      margin: 0 0 6px;
+      font-size: clamp(20px, 4vw, 30px);
+      font-weight: 800;
+      line-height: 1.1;
+    }
+    .upload-subtitle, .upload-hint, .upload-status, .upload-analysis {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .upload-hint { margin-top: 8px; font-size: 14px; }
+    .upload-file-button {
+      width: max-content;
+      margin-top: 16px;
+      min-height: 46px;
+      border-radius: 14px;
+    }
+    .upload-preview {
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+    .upload-preview-media {
+      width: 128px;
+      aspect-ratio: 1;
+      overflow: hidden;
+      border: 1px solid rgba(238,241,246,0.16);
+      border-radius: 22px;
+      display: grid;
+      place-items: center;
+      background: rgba(2,7,20,0.7);
+      color: var(--gold);
+      font-size: 42px;
+      font-weight: 800;
+    }
+    .upload-preview-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .upload-meta { display: grid; gap: 8px; }
+    .upload-name {
+      margin: 0;
+      color: var(--text);
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+    .upload-progress {
+      height: 8px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.09);
+    }
+    .upload-progress span {
+      display: block;
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, #8db7ff, #f5d56a);
+      transition: width 160ms ease;
+    }
+    .upload-analysis {
+      margin: 6px 0 0;
+      padding: 12px 14px;
+      border: 1px solid rgba(238,241,246,0.12);
+      border-radius: 16px;
+      background: rgba(255,255,255,0.045);
+    }
+    .upload-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .upload-actions button {
+      min-height: 42px;
+      border-radius: 12px;
+      padding: 0 14px;
+    }
+    .upload-error {
+      margin-top: 12px;
+      color: #ffd0d0;
+      line-height: 1.45;
+    }
     .actions {
       display: flex;
       gap: 12px;
@@ -162,6 +291,22 @@ AGENT_ONBOARDING_HTML = r"""
     @media (max-width: 520px) {
       header { align-items: flex-start; flex-direction: column; }
       .actions > * { width: 100%; }
+      .upload-drop,
+      .upload-preview {
+        grid-template-columns: 1fr;
+      }
+      .upload-icon,
+      .upload-preview-media {
+        width: 112px;
+      }
+      .upload-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .upload-actions button,
+      .upload-file-button {
+        width: 100%;
+      }
     }
   </style>
 </head>
@@ -180,9 +325,10 @@ AGENT_ONBOARDING_HTML = r"""
         <label id="question" for="answer"></label>
         <p class="why" id="why"></p>
         <textarea id="answer" autocomplete="off"></textarea>
+        <div id="file-upload-host"></div>
         <div class="actions">
           <button class="secondary" id="back" type="button">Назад</button>
-          <button class="primary" type="submit">Зберегти відповідь</button>
+          <button class="primary" id="save-answer" type="submit">Зберегти відповідь</button>
           <a class="secondary button" href="/agent/dashboard">У мене вже є агент</a>
         </div>
       </form>
@@ -208,6 +354,39 @@ AGENT_ONBOARDING_HTML = r"""
     const back = document.getElementById("back");
     const complete = document.getElementById("complete");
     const form = document.getElementById("onboarding-form");
+    const saveButton = document.getElementById("save-answer");
+    const fileUploadHost = document.getElementById("file-upload-host");
+    const fileConfigs = {
+      profile_photo: {
+        endpoint: "/api/onboarding/profile-photo",
+        deleteEndpoint: "/api/onboarding/profile-photo",
+        accept: "image/png,image/jpeg,image/heic,image/heif,.png,.jpg,.jpeg,.heic,.heif",
+        extensions: [".png", ".jpg", ".jpeg", ".heic", ".heif"],
+        maxBytes: 10 * 1024 * 1024,
+        icon: "📷",
+        title: "Перетягніть фотографію сюди",
+        subtitle: "Натисніть, щоб вибрати файл",
+        hint: "PNG • JPG • JPEG • HEIC • до 10 MB",
+        button: "Прикріпити файл",
+        previewType: "image",
+        emptyError: "Додайте фото, щоб продовжити створення Professional DNA."
+      },
+      uploaded_cv: {
+        endpoint: "/api/onboarding/cv",
+        deleteEndpoint: "/api/onboarding/cv",
+        accept: ".pdf,.doc,.docx,.odt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/rtf,text/rtf",
+        extensions: [".pdf", ".doc", ".docx", ".odt", ".rtf"],
+        maxBytes: 15 * 1024 * 1024,
+        icon: "📎",
+        title: "Перетягніть CV сюди",
+        subtitle: "Натисніть, щоб вибрати файл",
+        hint: "PDF • DOC • DOCX • ODT • RTF • до 15 MB",
+        button: "Прикріпити файл",
+        previewType: "document",
+        emptyError: "Завантажте CV, щоб ATLAS підготував дані для підтвердження."
+      }
+    };
+    const uploadState = {};
 
     async function loadSchema() {
       const response = await fetch(`/api/agent/onboarding/schema?language=${encodeURIComponent(language)}`);
@@ -221,10 +400,18 @@ AGENT_ONBOARDING_HTML = r"""
       if (!field) return;
       question.textContent = field.question;
       why.textContent = field.why;
-      answer.value = answers[field.key] || "";
+      answer.value = typeof answers[field.key] === "string" ? answers[field.key] : "";
       badge.textContent = `${field.step} / ${field.total}`;
       bar.style.width = `${Math.round((index / fields.length) * 100)}%`;
       back.disabled = index === 0;
+      const config = fileConfigs[field.key];
+      answer.classList.toggle("hidden", Boolean(config));
+      fileUploadHost.innerHTML = "";
+      if (config) {
+        uploadState[field.key] = uploadState[field.key] || {file: answers[field.key] || null, progress: 0, status: answers[field.key] ? "success" : "idle"};
+        renderUpload(field, config);
+      }
+      updateSaveState(field);
     }
 
     back.addEventListener("click", () => {
@@ -235,10 +422,24 @@ AGENT_ONBOARDING_HTML = r"""
       }
     });
 
+    document.addEventListener("paste", (event) => {
+      const field = fields[index];
+      const config = field && fileConfigs[field.key];
+      if (!config || !event.clipboardData?.files?.length) return;
+      handleSelectedFile(field, config, event.clipboardData.files[0]);
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const field = fields[index];
-      answers[field.key] = answer.value.trim();
+      if (fileConfigs[field.key] && !answers[field.key]?.id) {
+        renderUploadError(field, fileConfigs[field.key].emptyError);
+        updateSaveState(field);
+        return;
+      }
+      if (!fileConfigs[field.key]) {
+        answers[field.key] = answer.value.trim();
+      }
       localStorage.setItem("atlas_agent_onboarding_answers", JSON.stringify(answers));
       await fetch("/api/agent/onboarding/answer", {
         method: "POST",
@@ -260,6 +461,226 @@ AGENT_ONBOARDING_HTML = r"""
         complete.style.display = "block";
       }
     });
+
+    function renderUpload(field, config) {
+      const state = uploadState[field.key];
+      const file = state.file;
+      fileUploadHost.innerHTML = `
+        <section class="upload-card" id="upload-card-${field.key}">
+          <input class="hidden" id="upload-input-${field.key}" type="file" accept="${config.accept}" />
+          ${file ? uploadedTemplate(field, config, state) : emptyUploadTemplate(field, config, state)}
+          <div class="upload-error" id="upload-error-${field.key}">${escapeHtml(state.error || "")}</div>
+        </section>
+      `;
+      const card = document.getElementById(`upload-card-${field.key}`);
+      const input = document.getElementById(`upload-input-${field.key}`);
+      const drop = card.querySelector(".upload-drop");
+      const attach = card.querySelector("[data-action='attach']");
+      const replace = card.querySelector("[data-action='replace']");
+      const remove = card.querySelector("[data-action='delete']");
+      const view = card.querySelector("[data-action='view']");
+      const retry = card.querySelector("[data-action='retry']");
+
+      [drop, attach, replace].filter(Boolean).forEach(element => {
+        element.addEventListener("click", () => input.click());
+        element.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            input.click();
+          }
+        });
+      });
+      input.addEventListener("change", () => {
+        if (input.files?.[0]) handleSelectedFile(field, config, input.files[0]);
+      });
+      card.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        card.classList.add("drag-over");
+      });
+      card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+      card.addEventListener("drop", (event) => {
+        event.preventDefault();
+        card.classList.remove("drag-over");
+        if (event.dataTransfer?.files?.[0]) handleSelectedFile(field, config, event.dataTransfer.files[0]);
+      });
+      remove?.addEventListener("click", () => deleteUploadedFile(field, config));
+      view?.addEventListener("click", () => viewUploadedFile(field));
+      retry?.addEventListener("click", () => {
+        if (state.lastFile) handleSelectedFile(field, config, state.lastFile);
+      });
+    }
+
+    function emptyUploadTemplate(field, config, state) {
+      return `
+        <div class="upload-drop" role="button" tabindex="0" aria-label="${escapeHtml(config.button)}">
+          <div class="upload-icon">${config.icon}</div>
+          <div>
+            <p class="upload-title">${escapeHtml(config.title)}</p>
+            <div class="upload-subtitle">${escapeHtml(config.subtitle)}</div>
+            <div class="upload-hint">${escapeHtml(config.hint)}</div>
+            <button class="primary upload-file-button" data-action="attach" type="button">${escapeHtml(config.button)}</button>
+            ${state.status === "loading" ? progressTemplate(state.progress) : ""}
+          </div>
+        </div>
+      `;
+    }
+
+    function uploadedTemplate(field, config, state) {
+      const file = state.file;
+      const preview = config.previewType === "image" && file.previewUrl
+        ? `<img src="${file.previewUrl}" alt="Фото профілю" />`
+        : `<span>${config.previewType === "image" ? "A" : "CV"}</span>`;
+      const status = state.status === "loading" ? "Завантаження..." : "Завантажено";
+      return `
+        <div class="upload-preview">
+          <div class="upload-preview-media">${preview}</div>
+          <div class="upload-meta">
+            <p class="upload-name">${escapeHtml(file.original_name || file.name || "Файл")}</p>
+            <div class="upload-status">${formatBytes(file.size || 0)} • ${status}${file.created_at ? " • " + new Date(file.created_at).toLocaleDateString("uk-UA") : ""}</div>
+            ${state.status === "loading" ? progressTemplate(state.progress) : ""}
+            ${analysisTemplate(file.analysis)}
+            <div class="upload-actions">
+              <button class="secondary" data-action="view" type="button">Переглянути</button>
+              <button class="secondary" data-action="replace" type="button">Замінити</button>
+              <button class="secondary" data-action="delete" type="button">Видалити</button>
+              ${state.status === "error" ? `<button class="secondary" data-action="retry" type="button">Повторити</button>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function progressTemplate(progress) {
+      return `<div class="upload-progress" aria-label="Upload progress"><span style="width:${Math.max(8, progress || 8)}%"></span></div>`;
+    }
+
+    function analysisTemplate(analysis) {
+      if (!analysis?.message) return "";
+      const extracted = analysis.extracted ? Object.entries(analysis.extracted)
+        .filter(([, value]) => value && (!Array.isArray(value) || value.length))
+        .slice(0, 5)
+        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : value}`)
+        .join(" • ") : "";
+      return `<div class="upload-analysis">${escapeHtml(analysis.message)}${extracted ? `<br>${escapeHtml(extracted)}` : ""}</div>`;
+    }
+
+    async function handleSelectedFile(field, config, selectedFile) {
+      const validation = validateClientFile(selectedFile, config);
+      if (validation) {
+        uploadState[field.key] = {...(uploadState[field.key] || {}), error: validation, status: "error", lastFile: selectedFile};
+        renderUpload(field, config);
+        updateSaveState(field);
+        return;
+      }
+      const previousFileId = answers[field.key]?.id;
+      const state = uploadState[field.key] = {file: localFileInfo(selectedFile, config), progress: 12, status: "loading", error: "", lastFile: selectedFile};
+      renderUpload(field, config);
+      updateSaveState(field);
+      const timer = setInterval(() => {
+        state.progress = Math.min(92, state.progress + 13);
+        renderUpload(field, config);
+      }, 180);
+      try {
+        const body = new FormData();
+        body.append("file", selectedFile);
+        const response = await fetch(config.endpoint, {
+          method: "POST",
+          headers: {"X-ATLAS-User-Id": userId},
+          body
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success) throw new Error(result.detail || "Не вдалося завантажити файл.");
+        clearInterval(timer);
+        state.progress = 100;
+        state.status = "success";
+        state.file = {...result.file, previewUrl: state.file.previewUrl, name: selectedFile.name};
+        answers[field.key] = state.file;
+        localStorage.setItem("atlas_agent_onboarding_answers", JSON.stringify(answers));
+        if (previousFileId && previousFileId !== state.file.id) deleteServerFile(config, previousFileId);
+        renderUpload(field, config);
+      } catch (error) {
+        clearInterval(timer);
+        state.status = "error";
+        state.error = error.message || "Не вдалося завантажити файл.";
+        renderUpload(field, config);
+      }
+      updateSaveState(field);
+    }
+
+    function localFileInfo(file, config) {
+      const lowerName = file.name.toLowerCase();
+      const canPreview = config.previewType === "image" && !lowerName.endsWith(".heic") && !lowerName.endsWith(".heif");
+      return {
+        name: file.name,
+        original_name: file.name,
+        size: file.size,
+        previewUrl: canPreview ? URL.createObjectURL(file) : "",
+        analysis: {message: "Завантаження..."}
+      };
+    }
+
+    async function deleteUploadedFile(field, config) {
+      const fileId = answers[field.key]?.id || uploadState[field.key]?.file?.id;
+      if (fileId) await deleteServerFile(config, fileId);
+      delete answers[field.key];
+      uploadState[field.key] = {file: null, progress: 0, status: "idle"};
+      localStorage.setItem("atlas_agent_onboarding_answers", JSON.stringify(answers));
+      renderUpload(field, config);
+      updateSaveState(field);
+    }
+
+    async function deleteServerFile(config, fileId) {
+      await fetch(`${config.deleteEndpoint}/${encodeURIComponent(fileId)}`, {
+        method: "DELETE",
+        headers: {"X-ATLAS-User-Id": userId}
+      }).catch(() => {});
+    }
+
+    async function viewUploadedFile(field) {
+      const file = answers[field.key] || uploadState[field.key]?.file;
+      if (!file?.url) return;
+      const response = await fetch(file.url, {headers: {"X-ATLAS-User-Id": userId}});
+      if (!response.ok) return;
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    }
+
+    function validateClientFile(file, config) {
+      if (!file || file.size <= 0) return "Файл порожній. Прикріпіть інший файл.";
+      if (file.size > config.maxBytes) return `Файл завеликий. Максимальний розмір - ${formatBytes(config.maxBytes)}.`;
+      const lowerName = file.name.toLowerCase();
+      if (!config.extensions.some(extension => lowerName.endsWith(extension))) {
+        return `Непідтримуваний формат. Дозволено: ${config.extensions.join(", ")}.`;
+      }
+      return "";
+    }
+
+    function updateSaveState(field) {
+      const config = fileConfigs[field.key];
+      saveButton.disabled = Boolean(config) && (!answers[field.key]?.id || uploadState[field.key]?.status === "loading");
+    }
+
+    function renderUploadError(field, message) {
+      uploadState[field.key] = {...(uploadState[field.key] || {}), error: message};
+      renderUpload(field, fileConfigs[field.key]);
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return "0 MB";
+      return `${(bytes / (1024 * 1024)).toFixed(bytes > 1024 * 1024 ? 1 : 2)} MB`;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[char]);
+    }
 
     loadSchema();
   </script>
