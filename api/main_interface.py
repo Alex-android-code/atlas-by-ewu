@@ -1182,231 +1182,116 @@ def _role_card(card: dict[str, str]) -> str:
 """
 
 
-LANDING_HTML = """<!DOCTYPE html>
-<html lang="uk">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ATLAS | Центральна Нервова Система</title>
-    <link rel="icon" href="/static/brand/atlas-symbol.png" type="image/png" />
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            min-height: 100%;
-            background-color: #050914;
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            color: #ffffff;
-        }
-
-        * { box-sizing: border-box; }
-
-        #atlas-preloader {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 9999;
-            background-color: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: opacity 1.5s ease-in-out;
-        }
-
-        #atlas-intro-video {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .fade-out {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .hidden-content {
-            opacity: 0;
-            transition: opacity 2s ease-in;
-        }
-
-        #main-content {
-            min-height: 100vh;
-            padding: clamp(24px, 5vw, 40px);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background:
-                radial-gradient(circle at 20% 0%, rgba(77,168,218,0.16), transparent 28%),
-                radial-gradient(circle at 80% 12%, rgba(212,175,55,0.1), transparent 26%),
-                #050914;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 50px;
-            border-bottom: 1px solid #1f3a5f;
-            padding-bottom: 20px;
-            width: 100%;
-            max-width: 1200px;
-        }
-
-        h1 {
-            font-size: clamp(2rem, 6vw, 2.5rem);
-            font-weight: 300;
-            letter-spacing: 3px;
-            color: #4da8da;
-            margin: 0;
-            text-transform: uppercase;
-        }
-
-        .dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 25px;
-            width: 100%;
-            max-width: 1200px;
-        }
-
-        .card {
-            background-color: #0a1128;
-            border: 1px solid #1f3a5f;
-            border-radius: 8px;
-            padding: 25px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
-            transition: transform 0.3s ease, border-color 0.3s ease;
-        }
-
-        .card:hover {
-            transform: translateY(-5px);
-            border-color: #4da8da;
-        }
-
-        .card h3 {
-            color: #a0c4ff;
-            margin-top: 0;
-            border-bottom: 1px solid #1f3a5f;
-            padding-bottom: 15px;
-            font-weight: 400;
-            letter-spacing: 1px;
-        }
-
-        .data-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 12px;
-            font-size: 0.95rem;
-            color: #b0c4de;
-        }
-
-        .data-row span:last-child {
-            font-weight: bold;
-            color: #ffffff;
-            text-align: right;
-        }
-
-        .highlight-green { color: #5cff8a !important; }
-        .highlight-red { color: #ff5c5c !important; }
-        .highlight-blue { color: #4da8da !important; }
-
-        @media (max-width: 520px) {
-            #main-content { padding: 24px 16px; }
-            header { margin-bottom: 28px; }
-            h1 { letter-spacing: 1.5px; }
-            .dashboard { grid-template-columns: 1fr; }
-            .data-row { align-items: flex-start; flex-direction: column; gap: 4px; }
-            .data-row span:last-child { text-align: left; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            #atlas-preloader { display: none; }
-            .hidden-content { opacity: 1; }
-            * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
-        }
-    </style>
-</head>
-<body>
-    <div id="atlas-preloader">
-        <video id="atlas-intro-video" autoplay muted playsinline preload="auto">
-            <source src="/static/video/atlas-intro.webm?v=20260719-premium" type="video/webm">
-            <source src="/static/video/atlas-intro.mp4?v=20260719-premium" type="video/mp4">
-            Ваш браузер не підтримує відтворення відео.
-        </video>
+LANDING_HTML = _html(
+    "ATLAS by EWU",
+    f"""
+<div class="splash" id="splash" aria-live="polite">
+  <video class="splash-video" id="atlas-intro-video" autoplay muted playsinline preload="auto" poster="/static/brand/atlas-logo-dark.png">
+    <source src="/static/video/atlas-intro.webm?v=20260719-premium" type="video/webm" />
+    <source src="/static/video/atlas-intro.mp4?v=20260719-premium" type="video/mp4" />
+  </video>
+  <div class="splash-overlay" aria-hidden="true"></div>
+  <div class="splash-inner">
+    <div class="splash-logo">
+      <img src="/static/brand/atlas-logo-primary.png?v=20260718-brand-system" alt="ATLAS by EWU" />
     </div>
-
-    <div id="main-content" class="hidden-content">
-        <header>
-            <h1>ATLAS | Командний Центр</h1>
-        </header>
-
-        <div class="dashboard">
-            <div class="card">
-                <h3>Сутність: Люди</h3>
-                <div class="data-row"><span>Активні профілі:</span> <span class="highlight-blue">1,245</span></div>
-                <div class="data-row"><span>Оновлення навичок (24г):</span> <span>342</span></div>
-                <div class="data-row"><span>Ризики легалізації:</span> <span class="highlight-red">12</span></div>
-            </div>
-
-            <div class="card">
-                <h3>Сутність: Організації</h3>
-                <div class="data-row"><span>Компанії в системі:</span> <span class="highlight-blue">87</span></div>
-                <div class="data-row"><span>Активні процеси (Угоди):</span> <span>14</span></div>
-                <div class="data-row"><span>Кадрові ризики:</span> <span class="highlight-green">Мінімальні</span></div>
-            </div>
-
-            <div class="card">
-                <h3>Аналітичний Мозок</h3>
-                <div class="data-row"><span>Статус оптимізації:</span> <span class="highlight-green">Активно (0 Токенів)</span></div>
-                <div class="data-row"><span>Обробка документів:</span> <span>Синхронізовано</span></div>
-                <div class="data-row"><span>Згенеровано рішень:</span> <span class="highlight-blue">56</span></div>
-            </div>
+    <div class="splash-title">ATLAS by EWU</div>
+    <div class="splash-status" id="splash-status" data-i18n="main.splash.initializing">Ініціалізація AI-системи</div>
+    <div class="splash-loader" aria-hidden="true"><span></span></div>
+  </div>
+</div>
+<style>{SPLASH_CSS}</style>
+<main>
+  <section class="hero-home">
+    <div class="hero-copy">
+      <span class="eyebrow" data-i18n="main.hero.eyebrow">AI workforce platform</span>
+      <h1 data-i18n="main.hero.title">ATLAS для роботи, людей і бізнесу</h1>
+      <p class="lead" data-i18n="main.hero.lead">Преміальна платформа EWU для працівників, роботодавців і корпорацій: профілі, вакансії, AI-підбір, документи, CRM і захищене керування даними.</p>
+    </div>
+    <div class="role-grid" aria-label="Оберіть роль">
+      {"".join(_role_card(card) for card in ROLE_CARDS)}
+    </div>
+  </section>
+  <section class="world-section" aria-labelledby="world-title">
+    <div class="world-inner">
+      <div class="world-copy">
+        <div>
+          <span class="eyebrow" data-i18n="main.world.eyebrow">Global AI ecosystem</span>
+          <h2 id="world-title" data-i18n="main.world.title">ATLAS у світі</h2>
+          <p data-i18n="main.world.lead">Країни підключення ATLAS, статус запуску, локальні сервіси, вакансії, кандидати, партнери, легалізаційна підтримка та навчальні програми.</p>
         </div>
+      </div>
+      <div class="globe-card">
+        <canvas class="globe-canvas" id="atlas-globe" aria-label="Інтерактивний 3D-глобус ATLAS" data-i18n-aria-label="main.world.globe_label"></canvas>
+        <div class="globe-legend" aria-hidden="true">
+          <span class="status-chip active">Active</span>
+          <span class="status-chip launching">Launching</span>
+          <span class="status-chip planned">Planned</span>
+        </div>
+        <div class="globe-fallback" id="globe-fallback-list"></div>
+      </div>
+      <aside class="country-details" id="country-panel">
+        <h3 data-i18n="main.country.choose_title">Оберіть країну</h3>
+        <p class="lead" data-i18n="main.country.loading">Дані країн завантажуються з API ATLAS.</p>
+      </aside>
     </div>
-
-    <script>
-        document.addEventListener("DOMContentLoaded", function() {
-            const preloader = document.getElementById('atlas-preloader');
-            const mainContent = document.getElementById('main-content');
-            const introVideo = document.getElementById('atlas-intro-video');
-            const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            let fallbackTimeout = null;
-            let hidden = false;
-
-            if (reduceMotion) {
-                hidePreloader();
-                return;
-            }
-
-            introVideo.addEventListener('ended', hidePreloader, { once: true });
-            introVideo.addEventListener('error', hidePreloader, { once: true });
-
-            const playAttempt = introVideo.play();
-            if (playAttempt && typeof playAttempt.catch === 'function') {
-                playAttempt.catch(hidePreloader);
-            }
-
-            fallbackTimeout = setTimeout(hidePreloader, 4000);
-
-            function hidePreloader() {
-                if (hidden) return;
-                hidden = true;
-                if (fallbackTimeout) clearTimeout(fallbackTimeout);
-                preloader.classList.add('fade-out');
-                mainContent.classList.remove('hidden-content');
-                mainContent.style.opacity = '1';
-                setTimeout(() => {
-                    introVideo.pause();
-                    introVideo.remove();
-                    preloader.style.display = 'none';
-                }, 1500);
-            }
-        });
-    </script>
-</body>
-</html>"""
+  </section>
+</main>
+{GLOBE_SCRIPT}
+<script>
+  (function () {{
+    const splash = document.getElementById("splash");
+    if (!splash) return;
+    const introVideo = document.getElementById("atlas-intro-video");
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const firstVisit = !sessionStorage.getItem("atlasSplashSeen");
+    if (!firstVisit || reduce) {{
+      splash.classList.add("done");
+      splash.style.display = "none";
+      sessionStorage.setItem("atlasSplashSeen", "1");
+      if (introVideo) introVideo.pause();
+      return;
+    }}
+    const statuses = [
+      ["main.splash.initializing", "Ініціалізація AI-системи"],
+      ["main.splash.loading_agents", "Завантаження персональних агентів"],
+      ["main.splash.secure_environment", "Підготовка захищеного середовища"]
+    ];
+    const statusNode = document.getElementById("splash-status");
+    let index = 0;
+    const interval = window.setInterval(() => {{
+      index = (index + 1) % statuses.length;
+      statusNode.textContent = window.AtlasI18n?.t(statuses[index][0], statuses[index][1]) || statuses[index][1];
+    }}, 620);
+    let finished = false;
+    const finish = () => {{
+      if (finished) return;
+      finished = true;
+      window.clearInterval(interval);
+      sessionStorage.setItem("atlasSplashSeen", "1");
+      splash.classList.add("done");
+      window.setTimeout(() => {{
+        if (introVideo) {{
+          introVideo.pause();
+          introVideo.remove();
+        }}
+        splash.style.display = "none";
+      }}, 1500);
+    }};
+    if (introVideo) {{
+      introVideo.addEventListener("ended", () => {{
+        introVideo.pause();
+      }}, {{ once: true }});
+      introVideo.addEventListener("error", () => window.setTimeout(finish, 1850), {{ once: true }});
+      const playAttempt = introVideo.play();
+      if (playAttempt && typeof playAttempt.catch === "function") playAttempt.catch(() => window.setTimeout(finish, 1850));
+    }}
+    window.setTimeout(finish, 10000);
+  }})();
+</script>
+""",
+    "landing",
+)
 
 
 def _feature_cards(features: list[str]) -> str:

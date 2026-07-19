@@ -94,15 +94,15 @@ def test_country_admin_endpoints_require_authorization_and_support_lifecycle():
         assert archived.config["archived"] is True
 
 
-def test_landing_contains_central_command_shell():
+def test_landing_contains_globe_api_integration():
     from api.main_interface import LANDING_HTML, country_detail_html
 
-    assert "ATLAS |" in LANDING_HTML
-    assert "atlas-preloader" in LANDING_HTML
-    assert "/static/video/atlas-intro.mp4" in LANDING_HTML
+    assert "ATLAS у світі" in LANDING_HTML
+    assert "atlas-globe" in LANDING_HTML
+    assert "/api/public/countries" in LANDING_HTML
     assert "prefers-reduced-motion" in LANDING_HTML
-    assert "highlight-blue" in LANDING_HTML
+    assert "globe-fallback-list" in LANDING_HTML
 
     country_page = country_detail_html({"code": "PL", "name": "Poland", "status": "active", "route": "/countries/pl"})
     assert "Poland" in country_page
-    assert "feature-card" in country_page
+    assert "Для працівника" in country_page

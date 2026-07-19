@@ -15,22 +15,26 @@ def request(cookies=None, headers=None, host="unit-test", scheme="https"):
     )
 
 
-def test_landing_uses_central_nervous_system_preloader():
-    assert "ATLAS |" in LANDING_HTML
-    assert "id=\"atlas-preloader\"" in LANDING_HTML
-    assert "id=\"atlas-intro-video\"" in LANDING_HTML
-    assert "/static/video/atlas-intro.webm" in LANDING_HTML
-    assert "/static/video/atlas-intro.mp4" in LANDING_HTML
-    assert "dashboard" in LANDING_HTML
-    assert "highlight-green" in LANDING_HTML
+def test_landing_keeps_atlas_brand_and_three_role_cards():
+    assert "/static/brand/atlas-logo-primary.png" in LANDING_HTML
+    assert "Ініціалізація AI-системи" in LANDING_HTML
+    assert "Завантаження персональних агентів" in LANDING_HTML
+    assert "Підготовка захищеного середовища" in LANDING_HTML
+    assert "Працівник" in LANDING_HTML
+    assert "Роботодавець" in LANDING_HTML
+    assert "Корпорація" in LANDING_HTML
+    assert "/gdpr" in LANDING_HTML
+    assert "/crm/login" in LANDING_HTML
     assert "prefers-reduced-motion" in LANDING_HTML
 
 
 def test_role_pages_contain_expected_workspaces():
-    assert "/agent/onboarding" in EMPLOYEE_HTML
-    assert "CRM" in EMPLOYER_HTML
+    assert "Створення професійного профілю" in EMPLOYEE_HTML
+    assert "Персональний AI-агент" in EMPLOYEE_HTML
+    assert "AI-підбір кандидатів" in EMPLOYER_HTML
+    assert "Доступ до CRM" in EMPLOYER_HTML
     assert "Enterprise Security Center" in CORPORATE_HTML
-    assert "API" in CORPORATE_HTML
+    assert "ERP, CRM та API інтеграції" in CORPORATE_HTML
     assert "GDPR / RODO" in GDPR_HTML
 
 
