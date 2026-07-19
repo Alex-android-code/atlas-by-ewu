@@ -1,0 +1,16 @@
+Earth texture assets for the ATLAS country globe.
+
+Files:
+- earth_atmos_2048.jpg
+- earth_lights_2048.png
+- earth_clouds_1024.png
+
+Source basis:
+- NASA Earth Observatory Blue Marble / city lights imagery.
+- Browser-ready texture files were fetched from the Three.js examples texture set.
+
+References:
+- https://science.nasa.gov/earth/earth-observatory/the-blue-marble-true-color-global-imagery-at-1km-resolution/
+- https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg
+- https://threejs.org/examples/textures/planets/earth_lights_2048.png
+- https://threejs.org/examples/textures/planets/earth_clouds_1024.png

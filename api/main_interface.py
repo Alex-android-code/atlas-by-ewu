@@ -11,6 +11,7 @@ from api.observability import observability_body_html, observability_head_html
 
 ROLE_CARDS = [
     {
+        "key": "employee",
         "title": "Працівник",
         "subtitle": "Профіль, AI-агент, CV, робота, документи і кар'єрна карта.",
         "href": "/employee",
@@ -18,6 +19,7 @@ ROLE_CARDS = [
         "cta": "Обрати працівника",
     },
     {
+        "key": "employer",
         "title": "Роботодавець",
         "subtitle": "Вакансії, AI-підбір, комунікація, рекрутинг і аналітика.",
         "href": "/employer",
@@ -25,6 +27,7 @@ ROLE_CARDS = [
         "cta": "Обрати роботодавця",
     },
     {
+        "key": "corporate",
         "title": "Корпорація",
         "subtitle": "Enterprise CRM, HRM, аудит, автоматизація, безпека і API.",
         "href": "/corporate",
@@ -679,19 +682,23 @@ GLOBE_SCRIPT = """
     let selected = null;
     let dragging = false;
     let lastX = 0;
-    const landMasses = [
-      [[72,-168],[69,-128],[55,-104],[50,-82],[35,-82],[16,-92],[8,-78],[-6,-76],[-18,-66],[-36,-62],[-55,-70],[-22,-45],[5,-50],[24,-81],[43,-70],[58,-92],[70,-135]],
-      [[36,-10],[58,8],[71,38],[62,75],[48,92],[31,80],[18,45],[4,38],[-18,30],[-34,20],[-35,4],[-18,-6],[8,-12]],
-      [[70,35],[62,72],[58,116],[48,146],[32,134],[20,104],[8,78],[22,58],[30,42],[44,30]],
-      [[30,34],[24,48],[15,57],[5,50],[-4,42],[-12,44],[-24,34],[-35,22],[-28,12],[-8,12],[12,22]],
-      [[-10,112],[-18,125],[-28,146],[-40,146],[-44,126],[-32,112]],
-      [[72,-52],[78,-20],[72,18],[62,0],[60,-38]],
-    ];
-    const lightCities = [
-      [52.5,13.4],[52.2,21.0],[50.4,30.5],[48.9,2.3],[51.5,-0.1],[41.9,12.5],[40.4,-3.7],[38.7,-9.1],
-      [41.0,29.0],[30.0,31.2],[25.2,55.3],[28.6,77.2],[35.7,139.7],[37.5,127.0],[31.2,121.5],[1.3,103.8],
-      [40.7,-74.0],[34.0,-118.2],[-23.5,-46.6],[-34.6,-58.4],[-33.9,151.2]
-    ];
+    const textures = {
+      day: loadTexture("/static/assets/earth_atmos_2048.jpg"),
+      night: loadTexture("/static/assets/earth_lights_2048.png"),
+      clouds: loadTexture("/static/assets/earth_clouds_1024.png"),
+    };
+    let texturesReady = false;
+
+    function loadTexture(src) {
+      const image = new Image();
+      image.onload = () => {
+        texturesReady = Object.values(textures).every(texture => texture.complete && texture.naturalWidth > 0);
+        draw();
+      };
+      image.onerror = () => globeCard.classList.add("fallback");
+      image.src = src;
+      return image;
+    }
 
     function supportsWebGL() {
       try {
@@ -712,7 +719,12 @@ GLOBE_SCRIPT = """
     }
 
     function statusLabel(status) {
-      return {active: "Active", launching: "Launching", planned: "Planned"}[status] || "Planned";
+      const key = {active: "main.status.active", launching: "main.status.launching", planned: "main.status.planned"}[status] || "main.status.planned";
+      return tr(key, {active: "Active", launching: "Launching", planned: "Planned"}[status] || "Planned");
+    }
+
+    function tr(key, fallback) {
+      return window.AtlasI18n?.t ? window.AtlasI18n.t(key, fallback) : (fallback || key);
     }
 
     function statusColor(status) {
@@ -731,113 +743,86 @@ GLOBE_SCRIPT = """
     }
 
     function drawEarth(cx, cy, radius) {
-      const ocean = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.36, radius * 0.04, cx, cy, radius);
-      ocean.addColorStop(0, "#85d7ff");
-      ocean.addColorStop(0.18, "#1d9bf0");
-      ocean.addColorStop(0.45, "#0050a0");
-      ocean.addColorStop(0.74, "#002050");
-      ocean.addColorStop(1, "#000010");
-      ctx.fillStyle = ocean;
-      ctx.beginPath();
-      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-      ctx.fill();
+      drawStarField(cx, cy, radius);
 
       ctx.save();
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.clip();
-      drawLandMasses(cx, cy, radius);
-      drawNightLights(cx, cy, radius);
-      drawCloudBands(cx, cy, radius);
-      ctx.globalAlpha = 0.24;
-      ctx.strokeStyle = "rgba(224,240,255,0.45)";
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 7; i += 1) {
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, radius * (0.34 + i * 0.08), radius * 0.96, Math.PI / 2, 0, Math.PI * 2);
-        ctx.stroke();
+      if (texturesReady) {
+        drawTexturedSphere(textures.day, cx, cy, radius, 1, rotation, "source-over");
+        if (!lowPower) drawTexturedSphere(textures.night, cx, cy, radius, 0.72, rotation, "screen");
+        drawTexturedSphere(textures.clouds, cx, cy, radius, lowPower ? 0.18 : 0.3, rotation * 1.12 + 18, "screen");
+      } else {
+        const loadingOcean = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.36, radius * 0.04, cx, cy, radius);
+        loadingOcean.addColorStop(0, "#85d7ff");
+        loadingOcean.addColorStop(0.36, "#0050a0");
+        loadingOcean.addColorStop(1, "#000010");
+        ctx.fillStyle = loadingOcean;
+        ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
       }
       ctx.restore();
 
       const shade = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.28, radius * 0.2, cx + radius * 0.24, cy + radius * 0.18, radius * 1.05);
-      shade.addColorStop(0, "rgba(255,255,255,0.2)");
-      shade.addColorStop(0.48, "rgba(255,255,255,0)");
-      shade.addColorStop(1, "rgba(0,0,16,0.62)");
+      shade.addColorStop(0, "rgba(255,255,255,0.18)");
+      shade.addColorStop(0.42, "rgba(255,255,255,0)");
+      shade.addColorStop(0.74, "rgba(1,7,20,0.42)");
+      shade.addColorStop(1, "rgba(0,0,12,0.78)");
       ctx.fillStyle = shade;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
       ctx.fill();
 
-      const atmosphere = ctx.createRadialGradient(cx, cy, radius * 0.8, cx, cy, radius * 1.22);
+      const atmosphere = ctx.createRadialGradient(cx, cy, radius * 0.76, cx, cy, radius * 1.28);
       atmosphere.addColorStop(0, "rgba(56,189,248,0)");
       atmosphere.addColorStop(0.72, "rgba(56,189,248,0.18)");
-      atmosphere.addColorStop(1, "rgba(240,213,139,0.08)");
+      atmosphere.addColorStop(0.92, "rgba(120,210,255,0.2)");
+      atmosphere.addColorStop(1, "rgba(240,213,139,0.1)");
       ctx.fillStyle = atmosphere;
       ctx.beginPath();
-      ctx.arc(cx, cy, radius * 1.18, 0, Math.PI * 2);
+      ctx.arc(cx, cy, radius * 1.24, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    function drawLandMasses(cx, cy, radius) {
-      landMasses.forEach((points, index) => {
-        const projected = points.map(([lat, lon]) => project(lat, lon, radius, cx, cy)).filter(point => point.z > -0.22);
-        if (projected.length < 3) return;
-        const landGradient = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
-        landGradient.addColorStop(0, index % 2 ? "#d5bb86" : "#7fa36c");
-        landGradient.addColorStop(0.52, index % 2 ? "#8d7446" : "#4e7b5c");
-        landGradient.addColorStop(1, "#234a48");
-        ctx.globalAlpha = 0.82;
-        ctx.fillStyle = landGradient;
-        ctx.strokeStyle = "rgba(224,240,255,0.24)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        projected.forEach((point, pointIndex) => {
-          if (pointIndex === 0) ctx.moveTo(point.x, point.y);
-          else ctx.lineTo(point.x, point.y);
-        });
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      });
-      ctx.globalAlpha = 1;
-    }
-
-    function drawNightLights(cx, cy, radius) {
-      if (lowPower) return;
-      lightCities.forEach(([lat, lon]) => {
-        const point = project(lat, lon, radius, cx, cy);
-        if (point.z < -0.08) return;
-        const glow = Math.max(0.25, point.z);
-        ctx.globalAlpha = glow;
-        ctx.fillStyle = "rgba(255,192,64,0.86)";
-        ctx.shadowColor = "rgba(255,192,64,0.72)";
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        ctx.arc(point.x, point.y, 1.6 + point.z * 1.4, 0, Math.PI * 2);
-        ctx.fill();
-      });
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1;
-    }
-
-    function drawCloudBands(cx, cy, radius) {
-      ctx.globalAlpha = 0.34;
-      ctx.strokeStyle = "rgba(238,241,246,0.78)";
-      ctx.lineWidth = 2;
-      for (let i = -3; i <= 3; i += 1) {
-        ctx.beginPath();
-        ctx.ellipse(
-          cx + Math.sin(rotation / 22 + i) * radius * 0.08,
-          cy + i * radius * 0.17,
-          radius * (0.44 + (Math.abs(i) % 2) * 0.16),
-          radius * 0.055,
-          -0.2 + i * 0.18,
+    function drawTexturedSphere(image, cx, cy, radius, alpha, spin, compositeOperation) {
+      if (!image.complete || !image.naturalWidth) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.globalCompositeOperation = compositeOperation || "source-over";
+      const step = lowPower ? 2 : 1;
+      for (let dx = -radius; dx <= radius; dx += step) {
+        const nx = dx / radius;
+        const z = Math.sqrt(Math.max(0, 1 - nx * nx));
+        const stripHeight = radius * 2 * z;
+        const longitude = Math.atan2(nx, z) * 180 / Math.PI;
+        const sourceX = ((((longitude + spin + 540) % 360) / 360) * image.naturalWidth) | 0;
+        ctx.drawImage(
+          image,
+          sourceX,
           0,
-          Math.PI * 2
+          2,
+          image.naturalHeight,
+          cx + dx,
+          cy - stripHeight / 2,
+          step + 0.8,
+          stripHeight
         );
-        ctx.stroke();
       }
-      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function drawStarField(cx, cy, radius) {
+      if (lowPower) return;
+      ctx.save();
+      ctx.globalAlpha = 0.42;
+      ctx.fillStyle = "rgba(224,240,255,0.9)";
+      for (let i = 0; i < 90; i += 1) {
+        const x = (i * 47 % canvas.clientWidth);
+        const y = (i * 83 % canvas.clientHeight);
+        if (Math.hypot(x - cx, y - cy) < radius * 1.22) continue;
+        ctx.fillRect(x, y, i % 7 === 0 ? 1.6 : 1, i % 7 === 0 ? 1.6 : 1);
+      }
+      ctx.restore();
     }
 
     function drawRoutes(cx, cy, radius) {
@@ -891,7 +876,7 @@ GLOBE_SCRIPT = """
 
     function renderPanel(country) {
       if (!country) {
-        panel.innerHTML = "<h3>Оберіть країну</h3><p class='lead'>Натисніть золотий або срібний маркер на глобусі, щоб побачити локальні можливості ATLAS.</p>";
+        panel.innerHTML = `<h3>${tr("main.country.choose_title", "Оберіть країну")}</h3><p class='lead'>${tr("main.country.choose_lead", "Натисніть золотий або срібний маркер на глобусі, щоб побачити локальні можливості ATLAS.")}</p>`;
         return;
       }
       selected = country.id;
@@ -902,16 +887,16 @@ GLOBE_SCRIPT = """
           <div><h3>${escapeHtml(country.name)}</h3><span class="status-chip ${escapeHtml(country.status)}">${statusLabel(country.status)}</span></div>
         </div>
         <div class="country-grid">
-          <div class="country-stat"><span>Активні вакансії</span><strong>${country.vacancies_count || 0}</strong></div>
-          <div class="country-stat"><span>Кандидати</span><strong>${country.candidates_count || 0}</strong></div>
-          <div class="country-stat"><span>Мови</span><strong>${escapeHtml((country.languages || []).join(", ") || "-")}</strong></div>
-          <div class="country-stat"><span>Валюта</span><strong>${escapeHtml(country.currency || "-")}</strong></div>
-          <div class="country-stat"><span>Легалізація</span><strong>${country.legalization_available ? "Так" : "Ні"}</strong></div>
-          <div class="country-stat"><span>Навчання</span><strong>${country.training_available ? "Так" : "Ні"}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.vacancies", "Активні вакансії")}</span><strong>${country.vacancies_count || 0}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.candidates", "Кандидати")}</span><strong>${country.candidates_count || 0}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.languages", "Мови")}</span><strong>${escapeHtml((country.languages || []).join(", ") || "-")}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.currency", "Валюта")}</span><strong>${escapeHtml(country.currency || "-")}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.legalization", "Легалізація")}</span><strong>${country.legalization_available ? tr("common.yes", "Так") : tr("common.no", "Ні")}</strong></div>
+          <div class="country-stat"><span>${tr("main.country.training", "Навчання")}</span><strong>${country.training_available ? tr("common.yes", "Так") : tr("common.no", "Ні")}</strong></div>
         </div>
-        <div><strong>Сервіси</strong><div class="country-services">${services || "<span>ATLAS onboarding</span>"}</div></div>
-        <div class="country-stat"><span>Партнери ATLAS</span><strong>${escapeHtml((country.partners || []).join(", ") || "EWU network")}</strong></div>
-        <a class="button primary" href="${escapeHtml(country.route || "/employee")}">Перейти до національного розділу</a>
+        <div><strong>${tr("main.country.services", "Сервіси")}</strong><div class="country-services">${services || "<span>ATLAS onboarding</span>"}</div></div>
+        <div class="country-stat"><span>${tr("main.country.partners", "Партнери ATLAS")}</span><strong>${escapeHtml((country.partners || []).join(", ") || "EWU network")}</strong></div>
+        <a class="button primary" href="${escapeHtml(country.route || "/employee")}">${tr("main.country.open", "Перейти до національного розділу")}</a>
       `;
       draw();
     }
@@ -950,11 +935,11 @@ GLOBE_SCRIPT = """
         renderPanel(countries[0]);
       } catch (error) {
         globeCard.classList.add("fallback");
-        fallback.innerHTML = "<div class='country-stat'><strong>Country data unavailable</strong><span>Try refreshing the page.</span></div>";
+        fallback.innerHTML = `<div class='country-stat'><strong>${tr("main.country.unavailable", "Country data unavailable")}</strong><span>${tr("main.country.refresh_hint", "Try refreshing the page.")}</span></div>`;
       }
     }
 
-    if (!ctx || !supportsWebGL()) globeCard.classList.add("fallback");
+    if (!ctx) globeCard.classList.add("fallback");
     canvas.addEventListener("click", handleClick);
     canvas.addEventListener("pointerdown", event => { dragging = true; lastX = event.clientX; canvas.setPointerCapture(event.pointerId); });
     canvas.addEventListener("pointermove", event => {
@@ -965,6 +950,7 @@ GLOBE_SCRIPT = """
     });
     canvas.addEventListener("pointerup", () => { dragging = false; });
     window.addEventListener("resize", resize);
+    document.addEventListener("atlas:i18n", () => renderPanel(countries.find(country => country.id === selected) || countries[0]));
     resize();
     loadCountries().then(() => requestAnimationFrame(animate));
   })();
@@ -980,7 +966,7 @@ def _header(active: str = "") -> str:
         ("/gdpr", "GDPR / RODO", "gdpr"),
     ]
     links = "\n".join(
-        f'<a href="{href}" class="{"active" if active == key else ""}">{label}</a>'
+        f'<a href="{href}" class="{"active" if active == key else ""}" data-i18n="main.nav.{key}">{label}</a>'
         for href, label, key in nav
     )
     return f"""
@@ -990,11 +976,11 @@ def _header(active: str = "") -> str:
     {links}
     <div class="language-selector" data-language-selector>
       <button class="language-button" type="button" aria-expanded="false" data-language-button>
-        <span>Мова</span><span class="language-current" data-language-current>UK</span>
+        <span data-i18n="main.nav.language">Мова</span><span class="language-current" data-language-current>UK</span>
       </button>
       <div class="language-menu" role="menu" data-language-menu></div>
     </div>
-    <a class="crm-login" href="/crm/login"><span class="shield-icon" aria-hidden="true"></span>Увійти в CRM</a>
+    <a class="crm-login" href="/crm/login"><span class="shield-icon" aria-hidden="true"></span><span data-i18n="main.nav.crm_login">Увійти в CRM</span></a>
   </nav>
 </header>
 """
@@ -1034,10 +1020,10 @@ def _role_card(card: dict[str, str]) -> str:
 <a class="role-card {card["tone"]}" href="{card["href"]}">
   <div class="role-visual" aria-hidden="true"></div>
   <div>
-    <h2>{escape(card["title"])}</h2>
-    <p>{escape(card["subtitle"])}</p>
+    <h2 data-i18n="main.role.{card["key"]}.title">{escape(card["title"])}</h2>
+    <p data-i18n="main.role.{card["key"]}.subtitle">{escape(card["subtitle"])}</p>
   </div>
-  <span class="role-cta">{escape(card["cta"])}</span>
+  <span class="role-cta" data-i18n="main.role.{card["key"]}.cta">{escape(card["cta"])}</span>
 </a>
 """
 
@@ -1051,7 +1037,7 @@ LANDING_HTML = _html(
       <img src="/static/brand/atlas-logo-primary.png?v=20260718-brand-system" alt="ATLAS by EWU" />
     </div>
     <div class="splash-title">ATLAS by EWU</div>
-    <div class="splash-status" id="splash-status">Ініціалізація AI-системи</div>
+    <div class="splash-status" id="splash-status" data-i18n="main.splash.initializing">Ініціалізація AI-системи</div>
     <div class="splash-loader" aria-hidden="true"><span></span></div>
   </div>
 </div>
@@ -1059,9 +1045,9 @@ LANDING_HTML = _html(
 <main>
   <section class="hero-home">
     <div class="hero-copy">
-      <span class="eyebrow">AI workforce platform</span>
-      <h1>ATLAS для роботи, людей і бізнесу</h1>
-      <p class="lead">Преміальна платформа EWU для працівників, роботодавців і корпорацій: профілі, вакансії, AI-підбір, документи, CRM і захищене керування даними.</p>
+      <span class="eyebrow" data-i18n="main.hero.eyebrow">AI workforce platform</span>
+      <h1 data-i18n="main.hero.title">ATLAS для роботи, людей і бізнесу</h1>
+      <p class="lead" data-i18n="main.hero.lead">Преміальна платформа EWU для працівників, роботодавців і корпорацій: профілі, вакансії, AI-підбір, документи, CRM і захищене керування даними.</p>
     </div>
     <div class="role-grid" aria-label="Оберіть роль">
       {"".join(_role_card(card) for card in ROLE_CARDS)}
@@ -1071,13 +1057,13 @@ LANDING_HTML = _html(
     <div class="world-inner">
       <div class="world-copy">
         <div>
-          <span class="eyebrow">Global AI ecosystem</span>
-          <h2 id="world-title">ATLAS у світі</h2>
-          <p>Країни підключення ATLAS, статус запуску, локальні сервіси, вакансії, кандидати, партнери, легалізаційна підтримка та навчальні програми.</p>
+          <span class="eyebrow" data-i18n="main.world.eyebrow">Global AI ecosystem</span>
+          <h2 id="world-title" data-i18n="main.world.title">ATLAS у світі</h2>
+          <p data-i18n="main.world.lead">Країни підключення ATLAS, статус запуску, локальні сервіси, вакансії, кандидати, партнери, легалізаційна підтримка та навчальні програми.</p>
         </div>
       </div>
       <div class="globe-card">
-        <canvas class="globe-canvas" id="atlas-globe" aria-label="Інтерактивний 3D-глобус ATLAS"></canvas>
+        <canvas class="globe-canvas" id="atlas-globe" aria-label="Інтерактивний 3D-глобус ATLAS" data-i18n-aria-label="main.world.globe_label"></canvas>
         <div class="globe-legend" aria-hidden="true">
           <span class="status-chip active">Active</span>
           <span class="status-chip launching">Launching</span>
@@ -1086,8 +1072,8 @@ LANDING_HTML = _html(
         <div class="globe-fallback" id="globe-fallback-list"></div>
       </div>
       <aside class="country-details" id="country-panel">
-        <h3>Оберіть країну</h3>
-        <p class="lead">Дані країн завантажуються з API ATLAS.</p>
+        <h3 data-i18n="main.country.choose_title">Оберіть країну</h3>
+        <p class="lead" data-i18n="main.country.loading">Дані країн завантажуються з API ATLAS.</p>
       </aside>
     </div>
   </section>
@@ -1105,15 +1091,15 @@ LANDING_HTML = _html(
       return;
     }}
     const statuses = [
-      "Ініціалізація AI-системи",
-      "Завантаження персональних агентів",
-      "Підготовка захищеного середовища"
+      ["main.splash.initializing", "Ініціалізація AI-системи"],
+      ["main.splash.loading_agents", "Завантаження персональних агентів"],
+      ["main.splash.secure_environment", "Підготовка захищеного середовища"]
     ];
     const statusNode = document.getElementById("splash-status");
     let index = 0;
     const interval = window.setInterval(() => {{
       index = (index + 1) % statuses.length;
-      statusNode.textContent = statuses[index];
+      statusNode.textContent = window.AtlasI18n?.t(statuses[index][0], statuses[index][1]) || statuses[index][1];
     }}, 620);
     const started = performance.now();
     const finish = () => {{
