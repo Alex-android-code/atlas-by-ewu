@@ -285,12 +285,12 @@
   "language.saved": "Saved language",
   "language.unknown": "Unknown language",
   "language.options.pl": "Polski",
-  "language.options.uk": "\u0423\u043a\u0440\u0430\u0457\u043d\u0441\u044c\u043a\u0430",
-  "language.options.ru": "\u0420\u0443\u0441\u0441\u043a\u0438\u0439",
+  "language.options.uk": "Українська",
+  "language.options.ru": "Русский",
   "language.options.en": "English",
   "language.options.de": "Deutsch",
-  "language.options.es": "Espa\u00f1ol",
-  "language.options.pt": "Portugu\u00eas",
+  "language.options.es": "Español",
+  "language.options.pt": "Português",
   "navigation.home": "Home",
   "navigation.candidate": "Candidate",
   "navigation.employer": "Employer",
@@ -506,5 +506,10 @@
   "main.role_page.employee.primary": "Create profile",
   "main.role_page.employer.primary": "Start matching",
   "main.role_page.corporate.primary": "Open Control Center",
-  "main.role_page.back": "Back to role selection"
+  "main.role_page.back": "Back to role selection",
+  "main.country.worker_view": "For employees",
+  "main.country.worker_vacancies": "vacancies in this country",
+  "main.country.employer_view": "For employers",
+  "main.country.employer_candidates": "people looking for work",
+  "main.country.not_connected": "ATLAS is not connected in this country yet"
 }

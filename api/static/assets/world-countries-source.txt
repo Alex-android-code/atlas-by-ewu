@@ -1,0 +1,12 @@
+World country boundary asset for the ATLAS interactive globe.
+
+File:
+- world-countries-110m.geojson
+
+Source:
+- Natural Earth Vector, 1:110m Admin 0 Countries.
+- Natural Earth public domain map data.
+
+Reference:
+- https://www.naturalearthdata.com/
+- https://github.com/nvkelso/natural-earth-vector

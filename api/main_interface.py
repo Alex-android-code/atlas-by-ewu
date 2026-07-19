@@ -438,6 +438,21 @@ h1 {
 }
 .country-stat span { display: block; color: var(--atlas-muted); font-size: 12px; }
 .country-stat strong { display: block; margin-top: 3px; color: var(--atlas-platinum); }
+.country-stat small { display: block; margin-top: 4px; color: var(--atlas-muted); line-height: 1.3; }
+.audience-card {
+  border-color: rgba(214,178,94,0.24);
+  background: linear-gradient(180deg, rgba(214,178,94,0.13), rgba(255,255,255,0.04));
+}
+.audience-card.employer {
+  border-color: rgba(56,189,248,0.22);
+  background: linear-gradient(180deg, rgba(56,189,248,0.12), rgba(255,255,255,0.04));
+}
+.audience-card strong { font-size: 28px; color: var(--atlas-gold-soft); }
+.button.disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 .country-services {
   display: flex;
   gap: 7px;
@@ -677,6 +692,9 @@ GLOBE_SCRIPT = """
     const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const lowPower = window.innerWidth < 720 || (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
     let countries = [];
+    let countryShapes = [];
+    let countryByCode = new Map();
+    let lastCountryPaths = [];
     let markers = [];
     let rotation = -18;
     let selected = null;
@@ -688,6 +706,22 @@ GLOBE_SCRIPT = """
       clouds: loadTexture("/static/assets/earth_clouds_1024.png"),
     };
     let texturesReady = false;
+
+    fetch("/static/assets/world-countries-110m.geojson", {cache: "force-cache"})
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        countryShapes = (data?.features || [])
+          .map(feature => ({
+            code: String(feature.properties?.ISO_A2 || feature.properties?.iso_a2 || "").toUpperCase(),
+            name: feature.properties?.ADMIN || feature.properties?.NAME || "Country",
+            geometry: feature.geometry,
+          }))
+          .filter(feature => feature.code && feature.code !== "-99" && feature.geometry);
+        draw();
+      })
+      .catch(() => {
+        countryShapes = [];
+      });
 
     function loadTexture(src) {
       const image = new Image();
@@ -733,6 +767,28 @@ GLOBE_SCRIPT = """
       return "#d0d0d0";
     }
 
+    function countryRecord(shape) {
+      return countryByCode.get(shape.code) || {
+        id: `shape-${shape.code}`,
+        code: shape.code,
+        name: shape.name,
+        flag_url: "",
+        latitude: 0,
+        longitude: 0,
+        status: "planned",
+        languages: [],
+        currency: "-",
+        services: [],
+        partners: [],
+        vacancies_count: 0,
+        candidates_count: 0,
+        legalization_available: false,
+        training_available: false,
+        route: `/countries/${shape.code.toLowerCase()}`,
+        is_visible: false,
+      };
+    }
+
     function project(lat, lon, radius, centerX, centerY) {
       const phi = lat * Math.PI / 180;
       const theta = (lon + rotation) * Math.PI / 180;
@@ -763,6 +819,8 @@ GLOBE_SCRIPT = """
       }
       ctx.restore();
 
+      drawCountryLayer(cx, cy, radius);
+
       const shade = ctx.createRadialGradient(cx - radius * 0.34, cy - radius * 0.28, radius * 0.2, cx + radius * 0.24, cy + radius * 0.18, radius * 1.05);
       shade.addColorStop(0, "rgba(255,255,255,0.18)");
       shade.addColorStop(0.42, "rgba(255,255,255,0)");
@@ -782,6 +840,60 @@ GLOBE_SCRIPT = """
       ctx.beginPath();
       ctx.arc(cx, cy, radius * 1.24, 0, Math.PI * 2);
       ctx.fill();
+    }
+
+    function drawCountryLayer(cx, cy, radius) {
+      lastCountryPaths = [];
+      if (!countryShapes.length) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.clip();
+      countryShapes.forEach(shape => {
+        const record = countryRecord(shape);
+        const path = buildCountryPath(shape.geometry, cx, cy, radius);
+        if (!path) return;
+        const isAtlasCountry = countryByCode.has(shape.code);
+        if (isAtlasCountry) {
+          ctx.globalAlpha = record.id === selected ? 0.38 : 0.2;
+          ctx.fillStyle = statusColor(record.status);
+          ctx.fill(path);
+        }
+        ctx.globalAlpha = isAtlasCountry ? 0.68 : 0.28;
+        ctx.strokeStyle = isAtlasCountry ? "rgba(255,214,125,0.82)" : "rgba(224,240,255,0.34)";
+        ctx.lineWidth = isAtlasCountry ? 1.25 : 0.65;
+        ctx.stroke(path);
+        lastCountryPaths.push({path, shape, country: record, isAtlasCountry});
+      });
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function buildCountryPath(geometry, cx, cy, radius) {
+      const path = new Path2D();
+      let hasVisiblePoint = false;
+      const polygons = geometry.type === "Polygon" ? [geometry.coordinates] : geometry.type === "MultiPolygon" ? geometry.coordinates : [];
+      polygons.forEach(polygon => {
+        polygon.forEach(ring => {
+          let drawing = false;
+          ring.forEach(([lon, lat]) => {
+            const point = project(Number(lat), Number(lon), radius, cx, cy);
+            if (point.z < -0.08) {
+              drawing = false;
+              return;
+            }
+            hasVisiblePoint = true;
+            if (!drawing) {
+              path.moveTo(point.x, point.y);
+              drawing = true;
+            } else {
+              path.lineTo(point.x, point.y);
+            }
+          });
+          if (drawing) path.closePath();
+        });
+      });
+      return hasVisiblePoint ? path : null;
     }
 
     function drawTexturedSphere(image, cx, cy, radius, alpha, spin, compositeOperation) {
@@ -881,10 +993,17 @@ GLOBE_SCRIPT = """
       }
       selected = country.id;
       const services = (country.services || []).map(item => `<span>${escapeHtml(item)}</span>`).join("");
+      const nationalLink = country.is_visible === false
+        ? `<span class="button primary disabled" aria-disabled="true">${tr("main.country.not_connected", "ATLAS не подключён в этой стране")}</span>`
+        : `<a class="button primary" href="${escapeHtml(country.route || "/employee")}">${tr("main.country.open", "Перейти до національного розділу")}</a>`;
       panel.innerHTML = `
         <div class="country-head">
           <img class="country-flag" src="${escapeHtml(country.flag_url || "/static/brand/atlas-symbol.png")}" alt="${escapeHtml(country.name)} flag" />
           <div><h3>${escapeHtml(country.name)}</h3><span class="status-chip ${escapeHtml(country.status)}">${statusLabel(country.status)}</span></div>
+        </div>
+        <div class="country-grid">
+          <div class="country-stat audience-card worker"><span>${tr("main.country.worker_view", "Для работника")}</span><strong>${country.vacancies_count || 0}</strong><small>${tr("main.country.worker_vacancies", "вакансий в этой стране")}</small></div>
+          <div class="country-stat audience-card employer"><span>${tr("main.country.employer_view", "Для работодателя")}</span><strong>${country.candidates_count || 0}</strong><small>${tr("main.country.employer_candidates", "людей ищут работу")}</small></div>
         </div>
         <div class="country-grid">
           <div class="country-stat"><span>${tr("main.country.vacancies", "Активні вакансії")}</span><strong>${country.vacancies_count || 0}</strong></div>
@@ -896,7 +1015,7 @@ GLOBE_SCRIPT = """
         </div>
         <div><strong>${tr("main.country.services", "Сервіси")}</strong><div class="country-services">${services || "<span>ATLAS onboarding</span>"}</div></div>
         <div class="country-stat"><span>${tr("main.country.partners", "Партнери ATLAS")}</span><strong>${escapeHtml((country.partners || []).join(", ") || "EWU network")}</strong></div>
-        <a class="button primary" href="${escapeHtml(country.route || "/employee")}">${tr("main.country.open", "Перейти до національного розділу")}</a>
+        ${nationalLink}
       `;
       draw();
     }
@@ -911,6 +1030,13 @@ GLOBE_SCRIPT = """
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
+      for (let index = lastCountryPaths.length - 1; index >= 0; index -= 1) {
+        const item = lastCountryPaths[index];
+        if (ctx.isPointInPath(item.path, x, y)) {
+          renderPanel(item.country);
+          return;
+        }
+      }
       const hit = markers
         .filter(marker => marker.z > -0.18)
         .find(marker => Math.hypot(marker.x - x, marker.y - y) < 18);
@@ -928,6 +1054,7 @@ GLOBE_SCRIPT = """
         const response = await fetch("/api/public/countries", {cache: "no-store"});
         const data = await response.json();
         countries = data.countries || [];
+        countryByCode = new Map(countries.map(country => [String(country.code || "").toUpperCase(), country]));
         fallback.innerHTML = countries.map(country => `<button class="button" type="button" data-country="${escapeHtml(country.id)}">${escapeHtml(country.name)} · ${statusLabel(country.status)}</button>`).join("");
         fallback.querySelectorAll("[data-country]").forEach(button => {
           button.addEventListener("click", () => renderPanel(countries.find(country => country.id === button.dataset.country)));
