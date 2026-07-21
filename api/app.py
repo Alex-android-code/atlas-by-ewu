@@ -7,7 +7,7 @@ import secrets
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -776,24 +776,39 @@ def complete_onboarding_workflow(request: Request) -> dict:
     return result
 
 
-@app.post("/api/files/profile-photo")
-def upload_profile_photo_file(request: Request, file: UploadFile = File(...)) -> dict:
-    return _upload_onboarding_file(request, file, kind="profile_photo")
+@app.post("/api/files/upload")
+def upload_universal_file(
+    request: Request,
+    kind: str = Form(...),
+    file: UploadFile = File(...),
+) -> dict:
+    return _upload_onboarding_file(request, file, kind=kind)
 
 
-@app.post("/api/files/cv")
-def upload_cv_file(request: Request, file: UploadFile = File(...)) -> dict:
-    return _upload_onboarding_file(request, file, kind="cv")
+@app.get("/api/files/{file_id}")
+def get_universal_file(file_id: str, request: Request, token: str | None = None) -> FileResponse:
+    owner_id = _onboarding_owner_id(request, allow_anonymous=False)
+    try:
+        item = ONBOARDING_FILE_STORAGE.get(file_id, owner_id or None, token)
+        path = ONBOARDING_FILE_STORAGE.path_for(file_id, owner_id or None, token)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="File not found") from error
+    return FileResponse(path, media_type=item.mime_type, filename=item.original_name)
 
 
-@app.delete("/api/files/profile-photo/{file_id}")
-def delete_profile_photo_file(file_id: str, request: Request) -> dict:
-    return _delete_onboarding_file(request, file_id, kind="profile_photo")
+@app.get("/api/files/{file_id}/thumbnail")
+def get_universal_file_thumbnail(file_id: str, request: Request, token: str | None = None) -> FileResponse:
+    owner_id = _onboarding_owner_id(request, allow_anonymous=False)
+    try:
+        path = ONBOARDING_FILE_STORAGE.thumbnail_path_for(file_id, owner_id or None, token)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Thumbnail not found") from error
+    return FileResponse(path, media_type="image/webp", filename=f"{file_id}-thumbnail.webp")
 
 
-@app.delete("/api/files/cv/{file_id}")
-def delete_cv_file(file_id: str, request: Request) -> dict:
-    return _delete_onboarding_file(request, file_id, kind="cv")
+@app.delete("/api/files/{file_id}")
+def delete_universal_file(file_id: str, request: Request, kind: str | None = None) -> dict:
+    return _delete_onboarding_file(request, file_id, kind=kind)
 
 
 @app.post("/api/cv/{file_id}/parse")
@@ -829,47 +844,6 @@ def generate_professional_dna(request: Request) -> dict:
 @app.get("/api/professional-dna")
 def get_professional_dna(request: Request) -> dict:
     return get_onboarding_workflow_service().get_dna(_onboarding_owner_id(request))
-
-
-@app.post("/api/onboarding/profile-photo")
-def upload_onboarding_profile_photo(request: Request, file: UploadFile = File(...)) -> dict:
-    return _upload_onboarding_file(request, file, kind="profile_photo")
-
-
-@app.post("/api/onboarding/cv")
-def upload_onboarding_cv(request: Request, file: UploadFile = File(...)) -> dict:
-    return _upload_onboarding_file(request, file, kind="cv")
-
-
-@app.get("/api/onboarding/files/{file_id}")
-def get_onboarding_file(file_id: str, request: Request) -> FileResponse:
-    owner_id = _onboarding_owner_id(request)
-    try:
-        item = ONBOARDING_FILE_STORAGE.get(file_id, owner_id)
-        path = ONBOARDING_FILE_STORAGE.path_for(file_id, owner_id)
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail="File not found") from error
-    return FileResponse(path, media_type=item.mime_type, filename=item.original_name)
-
-
-@app.get("/api/onboarding/files/{file_id}/thumbnail")
-def get_onboarding_file_thumbnail(file_id: str, request: Request) -> FileResponse:
-    owner_id = _onboarding_owner_id(request)
-    try:
-        path = ONBOARDING_FILE_STORAGE.thumbnail_path_for(file_id, owner_id)
-    except FileNotFoundError as error:
-        raise HTTPException(status_code=404, detail="Thumbnail not found") from error
-    return FileResponse(path, media_type="image/webp", filename=f"{file_id}-thumbnail.webp")
-
-
-@app.delete("/api/onboarding/profile-photo/{file_id}")
-def delete_onboarding_profile_photo(file_id: str, request: Request) -> dict:
-    return _delete_onboarding_file(request, file_id, kind="profile_photo")
-
-
-@app.delete("/api/onboarding/cv/{file_id}")
-def delete_onboarding_cv(file_id: str, request: Request) -> dict:
-    return _delete_onboarding_file(request, file_id, kind="cv")
 
 
 @app.get("/api/agent/dashboard/{user_id}")
@@ -1514,12 +1488,14 @@ def _upload_onboarding_file(request: Request, file: UploadFile, kind: str) -> di
     return {"success": True, "file": stored.to_dict()}
 
 
-def _delete_onboarding_file(request: Request, file_id: str, kind: str) -> dict:
+def _delete_onboarding_file(request: Request, file_id: str, kind: str | None) -> dict:
     owner_id = _onboarding_owner_id(request)
     try:
         ONBOARDING_FILE_STORAGE.delete(file_id, owner_id, kind=kind)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="File not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return {"success": True, "deleted": file_id}
 
 

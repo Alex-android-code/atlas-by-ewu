@@ -50,16 +50,18 @@ class OnboardingApiTests(unittest.TestCase):
         self.assertEqual(session["current_step"], "welcome")
 
         photo = self.client.post(
-            "/api/files/profile-photo",
+            "/api/files/upload",
             headers=headers,
+            data={"kind": "profile-photo"},
             files={"file": ("avatar.png", png_bytes(), "image/png")},
         )
         self.assertEqual(photo.status_code, 200)
         self.assertTrue(photo.json()["file"]["thumbnail_url"])
 
         cv = self.client.post(
-            "/api/files/cv",
+            "/api/files/upload",
             headers=headers,
+            data={"kind": "cv"},
             files={"file": ("cv.pdf", b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF", "application/pdf")},
         )
         self.assertEqual(cv.status_code, 200)
@@ -102,6 +104,26 @@ class OnboardingApiTests(unittest.TestCase):
         self.assertEqual(dashboard.status_code, 200)
         self.assertTrue(dashboard.json()["documents"])
         self.assertEqual(dashboard.json()["professional_dna"]["version"], "professional_dna_v1_rule_based")
+
+    def test_universal_file_api_delete_and_signed_download(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        user_id = registered.json()["user_id"]
+        headers = {"X-ATLAS-User-Id": user_id}
+        uploaded = self.client.post(
+            "/api/files/upload",
+            headers=headers,
+            data={"kind": "document"},
+            files={"file": ("worker.pdf", b"%PDF-1.7\n%%EOF", "application/pdf")},
+        )
+        self.assertEqual(uploaded.status_code, 200)
+        file_data = uploaded.json()["file"]
+
+        downloaded = self.client.get(file_data["download_url"])
+        self.assertEqual(downloaded.status_code, 200)
+        deleted = self.client.delete(f"/api/files/{file_data['id']}?kind=document", headers=headers)
+        self.assertEqual(deleted.status_code, 200)
+        missing = self.client.get(file_data["download_url"])
+        self.assertEqual(missing.status_code, 404)
 
 
 if __name__ == "__main__":

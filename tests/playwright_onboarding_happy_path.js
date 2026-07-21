@@ -1,5 +1,6 @@
 const { chromium } = require("playwright");
 const path = require("path");
+const fs = require("fs");
 
 const baseUrl = process.env.ATLAS_BASE_URL || "http://127.0.0.1:8018";
 const photoPath = process.env.ATLAS_E2E_PHOTO || path.resolve(".tmp-onboarding-check/happy-avatar.png");
@@ -8,6 +9,34 @@ const cvPath = process.env.ATLAS_E2E_CV || path.resolve(".tmp-onboarding-check/h
 async function next(page) {
   await page.click("#next");
   await page.waitForTimeout(350);
+}
+
+async function dropFile(page, selector, filePath, mimeType) {
+  const payload = {
+    selector,
+    name: path.basename(filePath),
+    mimeType,
+    base64: fs.readFileSync(filePath).toString("base64"),
+  };
+  await page.evaluate(({ selector, name, mimeType, base64 }) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const file = new File([bytes], name, { type: mimeType });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    const element = document.querySelector(selector);
+    element.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }));
+    element.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+  }, payload);
+}
+
+async function dropVirtualFile(page, selector, name, mimeType, content) {
+  await page.evaluate(({ selector, name, mimeType, content }) => {
+    const file = new File([content], name, { type: mimeType });
+    const dataTransfer = new DataTransfer();
+    dataTransfer.items.add(file);
+    const element = document.querySelector(selector);
+    element.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+  }, { selector, name, mimeType, content });
 }
 
 (async () => {
@@ -21,7 +50,9 @@ async function next(page) {
   await page.fill('[data-path="agent.goal"]', "Find logistics work in Poland");
   await next(page);
 
-  await page.setInputFiles('input[type="file"]', photoPath);
+  await dropVirtualFile(page, '[data-universal-upload="profile_photo"]', "broken.png", "image/png", "not an image");
+  await page.waitForSelector('[data-action="retry-file"]');
+  await dropFile(page, '[data-universal-upload="profile_photo"]', photoPath, "image/png");
   await page.waitForSelector("text=happy-avatar.png");
   await next(page);
 

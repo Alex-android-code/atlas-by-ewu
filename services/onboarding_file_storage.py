@@ -1,13 +1,16 @@
-"""Private multipart file storage for ATLAS agent onboarding."""
+"""Universal private multipart file storage for ATLAS."""
 
 from __future__ import annotations
 
 import json
 import os
+import hashlib
+import hmac
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import RLock
+from time import time
 from typing import BinaryIO, Any
 from uuid import uuid4
 
@@ -16,19 +19,31 @@ from PIL import Image, UnidentifiedImageError
 from core.models import utc_now_iso
 
 
-PHOTO_MAX_BYTES = 10 * 1024 * 1024
-CV_MAX_BYTES = 15 * 1024 * 1024
+IMAGE_MAX_BYTES = 10 * 1024 * 1024
+DOCUMENT_MAX_BYTES = 15 * 1024 * 1024
 
 PHOTO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif"}
 PHOTO_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"}
-CV_EXTENSIONS = {".pdf", ".doc", ".docx", ".odt", ".rtf"}
-CV_MIME_TYPES = {
+DOCUMENT_EXTENSIONS = {".pdf", ".doc", ".docx", ".odt", ".rtf"}
+DOCUMENT_MIME_TYPES = {
     "application/pdf",
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.oasis.opendocument.text",
     "application/rtf",
     "text/rtf",
+}
+DANGEROUS_EXTENSIONS = {".bat", ".cmd", ".com", ".exe", ".html", ".js", ".msi", ".php", ".ps1", ".sh", ".svg", ".vbs"}
+FILE_KIND_CONFIG = {
+    "profile-photo": {"mode": "image", "document_type": "profile_photo"},
+    "profile_photo": {"mode": "image", "document_type": "profile_photo"},
+    "cv": {"mode": "document", "document_type": "cv"},
+    "certificate": {"mode": "document", "document_type": "certificate"},
+    "diploma": {"mode": "document", "document_type": "diploma"},
+    "document": {"mode": "document", "document_type": "document"},
+    "worker-document": {"mode": "document", "document_type": "worker_document"},
+    "employer-document": {"mode": "document", "document_type": "employer_document"},
+    "company-document": {"mode": "document", "document_type": "company_document"},
 }
 
 
@@ -56,8 +71,9 @@ class StoredOnboardingFile:
             "mimeType": self.mime_type,
             "size": self.size,
             "created_at": self.created_at,
-            "url": f"/api/onboarding/files/{self.id}",
-            "thumbnail_url": f"/api/onboarding/files/{self.id}/thumbnail" if self.thumbnail_name else "",
+            "url": _signed_file_url(self.id, self.owner_id, "download"),
+            "download_url": _signed_file_url(self.id, self.owner_id, "download"),
+            "thumbnail_url": _signed_file_url(self.id, self.owner_id, "thumbnail") if self.thumbnail_name else "",
             "analysis": self.analysis,
         }
 
@@ -66,18 +82,19 @@ class OnboardingFileStorage:
     def __init__(self, base_dir: Path | None = None) -> None:
         configured = os.getenv("ATLAS_UPLOAD_DIR")
         self.base_dir = base_dir or (
-            Path(configured) if configured else Path(os.getenv("ATLAS_DATA_DIR", "data")) / "private_uploads" / "onboarding"
+            Path(configured) if configured else Path(os.getenv("ATLAS_DATA_DIR", "data")) / "private_uploads" / "files"
         )
         self.base_dir.mkdir(parents=True, exist_ok=True)
         self._index_path = self.base_dir / "files.json"
         self._lock = RLock()
 
     def save(self, *, owner_id: str, kind: str, filename: str | None, mime_type: str | None, stream: BinaryIO) -> StoredOnboardingFile:
+        kind = _normalize_kind(kind)
         original_name = _safe_original_name(filename)
         suffix = Path(original_name).suffix.lower()
-        file_id = f"ONB-{uuid4().hex[:16].upper()}"
+        file_id = f"FIL-{uuid4().hex[:20].upper()}"
         detected_mime = (mime_type or "application/octet-stream").lower()
-        max_bytes = PHOTO_MAX_BYTES if kind == "profile_photo" else CV_MAX_BYTES
+        max_bytes = _max_bytes_for(kind)
         stored_name = f"{file_id}{suffix}"
         target_path = self.base_dir / stored_name
 
@@ -120,22 +137,26 @@ class OnboardingFileStorage:
             self._save_index(index)
         return item
 
-    def get(self, file_id: str, owner_id: str) -> StoredOnboardingFile:
+    def get(self, file_id: str, owner_id: str | None = None, token: str | None = None) -> StoredOnboardingFile:
         with self._lock:
             item = self._load_index().get(file_id)
-        if not item or item.get("owner_id") != owner_id:
+        if not item:
+            raise FileNotFoundError(file_id)
+        if token and _verify_signed_token(file_id, item.get("owner_id", ""), token):
+            return _stored_from_dict(item)
+        if not owner_id or item.get("owner_id") != owner_id:
             raise FileNotFoundError(file_id)
         return _stored_from_dict(item)
 
-    def path_for(self, file_id: str, owner_id: str) -> Path:
-        item = self.get(file_id, owner_id)
+    def path_for(self, file_id: str, owner_id: str | None = None, token: str | None = None) -> Path:
+        item = self.get(file_id, owner_id, token)
         path = self.base_dir / item.stored_name
         if not path.exists():
             raise FileNotFoundError(file_id)
         return path
 
-    def thumbnail_path_for(self, file_id: str, owner_id: str) -> Path:
-        item = self.get(file_id, owner_id)
+    def thumbnail_path_for(self, file_id: str, owner_id: str | None = None, token: str | None = None) -> Path:
+        item = self.get(file_id, owner_id, token)
         if not item.thumbnail_name:
             raise FileNotFoundError(file_id)
         path = self.base_dir / item.thumbnail_name
@@ -144,6 +165,7 @@ class OnboardingFileStorage:
         return path
 
     def delete(self, file_id: str, owner_id: str, kind: str | None = None) -> bool:
+        kind = _normalize_kind(kind) if kind else None
         with self._lock:
             index = self._load_index()
             item = index.get(file_id)
@@ -157,6 +179,20 @@ class OnboardingFileStorage:
         if item.get("thumbnail_name"):
             (self.base_dir / item["thumbnail_name"]).unlink(missing_ok=True)
         return True
+
+    def remove_orphan_files(self) -> int:
+        with self._lock:
+            index = self._load_index()
+            referenced = {item.get("stored_name") for item in index.values()}
+            referenced.update(item.get("thumbnail_name") for item in index.values() if item.get("thumbnail_name"))
+        removed = 0
+        for path in self.base_dir.iterdir():
+            if path.name == self._index_path.name or path.name in referenced:
+                continue
+            if path.is_file():
+                path.unlink(missing_ok=True)
+                removed += 1
+        return removed
 
     def _load_index(self) -> dict[str, dict[str, Any]]:
         if not self._index_path.exists():
@@ -187,22 +223,75 @@ def _stored_from_dict(item: dict[str, Any]) -> StoredOnboardingFile:
     )
 
 
+def _signed_file_url(file_id: str, owner_id: str, variant: str) -> str:
+    expires = int(time()) + 60 * 30
+    token = build_signed_token(file_id, owner_id, variant, expires)
+    suffix = "/thumbnail" if variant == "thumbnail" else ""
+    return f"/api/files/{file_id}{suffix}?token={token}"
+
+
+def _sign_file_token(file_id: str, owner_id: str, variant: str, expires: int) -> str:
+    secret = os.getenv("ATLAS_FILE_SIGNING_SECRET") or os.getenv("ATLAS_ADMIN_TOKEN") or "atlas-local-file-secret"
+    payload = f"{file_id}:{owner_id}:{variant}:{expires}".encode("utf-8")
+    return hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def _verify_signed_token(file_id: str, owner_id: str, token: str) -> bool:
+    try:
+        variant, expires_raw, signature = token.split(":", 2)
+        expires = int(expires_raw)
+    except ValueError:
+        return False
+    if expires < int(time()):
+        return False
+    expected = _sign_file_token(file_id, owner_id, variant, expires)
+    return hmac.compare_digest(expected, signature)
+
+
+def build_signed_token(file_id: str, owner_id: str, variant: str, expires: int) -> str:
+    return f"{variant}:{expires}:{_sign_file_token(file_id, owner_id, variant, expires)}"
+
+
 def _safe_original_name(filename: str | None) -> str:
     name = Path(filename or "upload.bin").name.strip()
     return name or "upload.bin"
+
+
+def _normalize_kind(kind: str) -> str:
+    normalized = (kind or "").strip().lower().replace("_", "-")
+    if normalized not in FILE_KIND_CONFIG:
+        raise ValueError("Unsupported file kind")
+    return normalized
+
+
+def _mode_for(kind: str) -> str:
+    return FILE_KIND_CONFIG[_normalize_kind(kind)]["mode"]
+
+
+def _max_bytes_for(kind: str) -> int:
+    return IMAGE_MAX_BYTES if _mode_for(kind) == "image" else DOCUMENT_MAX_BYTES
+
+
+def _validate_safe_filename(original_name: str) -> None:
+    suffixes = [suffix.lower() for suffix in Path(original_name).suffixes]
+    if any(suffix in DANGEROUS_EXTENSIONS for suffix in suffixes):
+        raise ValueError("File name contains an unsafe extension.")
+    if not suffixes:
+        raise ValueError("File must have an extension.")
 
 
 def _validate_file(path: Path, kind: str, original_name: str, mime_type: str, size: int) -> None:
     if size <= 0:
         raise ValueError("Файл порожній. Прикріпіть інший файл.")
     suffix = Path(original_name).suffix.lower()
-    if kind == "profile_photo":
+    _validate_safe_filename(original_name)
+    if _mode_for(kind) == "image":
         if suffix not in PHOTO_EXTENSIONS or mime_type not in PHOTO_MIME_TYPES:
             raise ValueError("Фото має бути у форматі PNG, JPG, JPEG або HEIC.")
         _validate_image(path, suffix)
         return
-    if kind == "cv":
-        if suffix not in CV_EXTENSIONS or mime_type not in CV_MIME_TYPES:
+    if _mode_for(kind) == "document":
+        if suffix not in DOCUMENT_EXTENSIONS or mime_type not in DOCUMENT_MIME_TYPES:
             raise ValueError("CV має бути у форматі PDF, DOC, DOCX, ODT або RTF.")
         _validate_document_signature(path, suffix)
         return
@@ -235,7 +324,7 @@ def _validate_document_signature(path: Path, suffix: str) -> None:
 
 
 def _create_thumbnail(path: Path, file_id: str, kind: str, original_name: str) -> str | None:
-    if kind != "profile_photo":
+    if _mode_for(kind) != "image":
         return None
     suffix = Path(original_name).suffix.lower()
     if suffix in {".heic", ".heif"}:
@@ -250,7 +339,7 @@ def _create_thumbnail(path: Path, file_id: str, kind: str, original_name: str) -
 
 
 def _analyze_file(path: Path, kind: str, original_name: str, mime_type: str, thumbnail_name: str | None) -> dict[str, Any]:
-    if kind == "profile_photo":
+    if _mode_for(kind) == "image":
         return _analyze_photo(path, original_name, thumbnail_name)
     return _analyze_cv(original_name, mime_type)
 
@@ -314,6 +403,6 @@ def _analyze_cv(original_name: str, mime_type: str) -> dict[str, Any]:
 
 
 def _too_large_message(kind: str) -> str:
-    if kind == "profile_photo":
+    if _mode_for(kind) == "image":
         return "Фото завелике. Максимальний розмір - 10 MB."
     return "CV завелике. Максимальний розмір - 15 MB."

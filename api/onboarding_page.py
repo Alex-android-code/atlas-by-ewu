@@ -125,6 +125,20 @@ AGENT_ONBOARDING_HTML = r"""
       background: radial-gradient(circle at 15% 0%, rgba(212,175,55,0.18), transparent 32%), rgba(255,255,255,0.04);
     }
     .upload.drag { border-color: #f5d56a; background-color: rgba(212,175,55,0.08); }
+    .upload-progress {
+      height: 8px;
+      margin: 12px 0;
+      overflow: hidden;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.09);
+    }
+    .upload-progress span {
+      display: block;
+      width: 1%;
+      height: 100%;
+      background: linear-gradient(90deg, #8db7ff, #f5d56a);
+      transition: width 160ms ease;
+    }
     .file-row { display: grid; grid-template-columns: 112px 1fr; gap: 16px; align-items: center; }
     .preview {
       width: 112px;
@@ -184,6 +198,35 @@ AGENT_ONBOARDING_HTML = r"""
     let current = "welcome";
     let local = {};
     let selectedParsed = {};
+    const uploadRuntime = {};
+    const uploadConfigs = {
+      profile_photo: {
+        mode: "image",
+        serverKind: "profile-photo",
+        acceptedTypes: "image/png,image/jpeg,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.webp,.heic,.heif",
+        extensions: /\.(png|jpg|jpeg|webp|heic|heif)$/i,
+        maxSize: 10 * 1024 * 1024,
+        maxFiles: 1,
+        uploadEndpoint: "/api/files/upload",
+        preview: true,
+        allowReplace: true,
+        allowDelete: true,
+        allowDownload: true
+      },
+      cv: {
+        mode: "document",
+        serverKind: "cv",
+        acceptedTypes: ".pdf,.doc,.docx,.odt,.rtf,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/rtf,text/rtf",
+        extensions: /\.(pdf|doc|docx|odt|rtf)$/i,
+        maxSize: 15 * 1024 * 1024,
+        maxFiles: 1,
+        uploadEndpoint: "/api/files/upload",
+        preview: true,
+        allowReplace: true,
+        allowDelete: true,
+        allowDownload: true
+      }
+    };
 
     const view = document.getElementById("view");
     const badge = document.getElementById("step-badge");
@@ -309,7 +352,7 @@ AGENT_ONBOARDING_HTML = r"""
         el.addEventListener("input", () => setPath(el.dataset.path, el.type === "checkbox" ? el.checked : el.value));
         if (el.type === "checkbox") el.addEventListener("change", () => setPath(el.dataset.path, el.checked));
       });
-      document.querySelectorAll("[data-upload]").forEach(bindUpload);
+      document.querySelectorAll("[data-universal-upload]").forEach(bindUniversalUpload);
       document.querySelector("[data-action='parse-cv']")?.addEventListener("click", parseCv);
       document.querySelector("[data-action='accept-all-cv']")?.addEventListener("click", acceptAllCv);
       document.querySelector("[data-action='accept-cv']")?.addEventListener("click", acceptCv);
@@ -385,8 +428,8 @@ AGENT_ONBOARDING_HTML = r"""
       return false;
     }
 
-    function bindUpload(root) {
-      const kind = root.dataset.upload;
+    function bindUniversalUpload(root) {
+      const kind = root.dataset.universalUpload;
       const input = root.querySelector("input[type=file]");
       root.addEventListener("dragover", (event) => { event.preventDefault(); root.classList.add("drag"); });
       root.addEventListener("dragleave", () => root.classList.remove("drag"));
@@ -396,23 +439,71 @@ AGENT_ONBOARDING_HTML = r"""
         if (event.dataTransfer.files[0]) upload(kind, event.dataTransfer.files[0]);
       });
       root.querySelector("[data-action='choose-file']")?.addEventListener("click", () => input.click());
+      root.querySelector("[data-action='retry-file']")?.addEventListener("click", () => uploadRuntime[kind]?.lastFile && upload(kind, uploadRuntime[kind].lastFile));
       input.addEventListener("change", () => input.files[0] && upload(kind, input.files[0]));
     }
 
     async function upload(kind, file) {
+      return universalUpload(kind, file);
+    }
+
+    async function legacyUploadUnused(kind, file) {
       const isPhoto = kind === "profile_photo";
       const max = isPhoto ? 10 * 1024 * 1024 : 15 * 1024 * 1024;
       const allowed = isPhoto ? /\.(png|jpg|jpeg|webp|heic|heif)$/i : /\.(pdf|doc|docx|odt|rtf)$/i;
       if (!allowed.test(file.name) || file.size > max) return fail(isPhoto ? "Фото має бути JPG/JPEG/PNG/WEBP/HEIC до 10 MB." : "CV має бути PDF/DOC/DOCX/ODT/RTF до 15 MB.");
       const body = new FormData();
       body.append("file", file);
-      const endpoint = isPhoto ? "/api/files/profile-photo" : "/api/files/cv";
+      const endpoint = "/api/files/upload";
       const response = await fetch(endpoint, {method: "POST", headers: {"X-ATLAS-User-Id": userId}, body});
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data.success) return fail(data.detail || "Файл не завантажено.");
       setPath(`${kind}.file`, data.file);
       await api("/api/onboarding", {method: "PATCH", body: JSON.stringify({step: kind === "profile_photo" ? "profile_photo" : "cv", data: local[kind]}), headers});
       if (kind === current) render();
+    }
+
+    async function universalUpload(kind, file) {
+      const config = uploadConfigs[kind];
+      if (!config) return fail("Unsupported upload type.");
+      if (!config.extensions.test(file.name) || file.size > config.maxSize) return fail(config.mode === "image" ? "Фото має бути JPG/JPEG/PNG/WEBP/HEIC до 10 MB." : "Документ має бути PDF/DOC/DOCX/ODT/RTF до 15 MB.");
+      const body = new FormData();
+      body.append("kind", config.serverKind);
+      body.append("file", file);
+      uploadRuntime[kind] = {status: "uploading", progress: 1, lastFile: file, error: ""};
+      render();
+      try {
+        const data = await uploadWithProgress(config.uploadEndpoint, body, kind);
+        if (!data.success) throw new Error(data.detail || "File upload failed.");
+        setPath(`${kind}.file`, data.file);
+        uploadRuntime[kind] = {status: "success", progress: 100, lastFile: file, error: ""};
+        await api("/api/onboarding", {method: "PATCH", body: JSON.stringify({step: kind === "profile_photo" ? "profile_photo" : "cv", data: local[kind]}), headers});
+      } catch (error) {
+        uploadRuntime[kind] = {status: "error", progress: 0, lastFile: file, error: error.message || "File upload failed."};
+        fail(uploadRuntime[kind].error);
+      }
+      render();
+    }
+
+    function uploadWithProgress(endpoint, body, kind) {
+      return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", endpoint);
+        request.setRequestHeader("X-ATLAS-User-Id", userId);
+        request.upload.addEventListener("progress", (event) => {
+          if (!event.lengthComputable) return;
+          uploadRuntime[kind].progress = Math.max(1, Math.round((event.loaded / event.total) * 100));
+          const bar = document.querySelector(`[data-upload-progress="${kind}"] span`);
+          if (bar) bar.style.width = `${uploadRuntime[kind].progress}%`;
+        });
+        request.onload = () => {
+          const data = JSON.parse(request.responseText || "{}");
+          if (request.status >= 200 && request.status < 300) resolve(data);
+          else reject(new Error(data.detail || "File upload failed."));
+        };
+        request.onerror = () => reject(new Error("Network error while uploading file."));
+        request.send(body);
+      });
     }
 
     async function viewFile() {
@@ -430,8 +521,8 @@ AGENT_ONBOARDING_HTML = r"""
       const kind = current === "profile_photo" ? "profile_photo" : "cv";
       const file = local[kind]?.file;
       if (!file?.id) return;
-      const endpoint = kind === "profile_photo" ? "/api/files/profile-photo" : "/api/files/cv";
-      await fetch(`${endpoint}/${encodeURIComponent(file.id)}`, {method: "DELETE", headers: {"X-ATLAS-User-Id": userId}});
+      const config = uploadConfigs[kind];
+      await fetch(`/api/files/${encodeURIComponent(file.id)}?kind=${encodeURIComponent(config.serverKind)}`, {method: "DELETE", headers: {"X-ATLAS-User-Id": userId}});
       setPath(`${kind}.file`, null);
       render();
     }
@@ -497,12 +588,60 @@ AGENT_ONBOARDING_HTML = r"""
       render();
     }
 
+    function UniversalFileUpload({key, title, hint, value, runtime, config}) {
+      const file = value;
+      const progress = runtime.status === "uploading"
+        ? `<div class="upload-progress" data-upload-progress="${key}"><span style="width:${runtime.progress || 1}%"></span></div>`
+        : "";
+      const error = runtime.status === "error" ? `<p class="error">${escapeHtml(runtime.error || "Upload failed.")}</p>` : "";
+      const preview = config.mode === "image" && file?.thumbnail_url ? `<img src="${file.thumbnail_url}" alt="${escapeHtml(title)}">` : `<span>${config.mode === "image" ? "A" : "DOC"}</span>`;
+      return `
+        <h2>${title}</h2>
+        <div class="upload" data-universal-upload="${key}" data-mode="${config.mode}">
+          <input class="hidden" type="file" accept="${config.acceptedTypes}">
+          ${file ? `
+            <div class="file-row">
+              <div class="preview">${preview}</div>
+              <div>
+                <h3>${escapeHtml(file.original_name || "File")}</h3>
+                <p>${formatBytes(file.size || 0)} · ${escapeHtml(file.mimeType || "")}</p>
+                <p class="small">${escapeHtml(file.analysis?.message || "File uploaded.")}</p>
+                ${progress}
+                ${error}
+                <div class="actions">
+                  ${config.allowDownload ? `<button class="secondary" data-action="view-file" type="button">Переглянути</button>` : ""}
+                  ${config.allowReplace ? `<button class="secondary" data-action="choose-file" type="button">Замінити</button>` : ""}
+                  ${config.allowDelete ? `<button class="danger" data-action="delete-file" type="button">Видалити</button>` : ""}
+                  ${runtime.status === "error" ? `<button class="secondary" data-action="retry-file" type="button">Повторити</button>` : ""}
+                </div>
+              </div>
+            </div>` : `
+            <h3>Прикріпити файл</h3>
+            <p>Перетягніть файл сюди або виберіть його на комп'ютері. ${hint}</p>
+            ${progress}
+            ${error}
+            <button class="primary" data-action="choose-file" type="button">Прикріпити файл</button>
+            ${runtime.status === "error" ? `<button class="secondary" data-action="retry-file" type="button">Повторити</button>` : ""}`}
+        </div>`;
+    }
+
     function fileTemplate(kind, title, hint, accept) {
+      return UniversalFileUpload({
+        key: kind,
+        title,
+        hint,
+        value: local[kind]?.file,
+        runtime: uploadRuntime[kind] || {},
+        config: uploadConfigs[kind]
+      });
+    }
+
+    function legacyFileTemplateUnused(kind, title, hint, accept) {
       const file = local[kind]?.file;
       const preview = kind === "profile_photo" && file?.thumbnail_url ? `<img src="${file.thumbnail_url}" alt="Фото профілю">` : `<span>${kind === "profile_photo" ? "A" : "CV"}</span>`;
       return `
         <h2>${title}</h2>
-        <div class="upload" data-upload="${kind}">
+        <div class="upload" data-universal-upload="${kind}">
           <input class="hidden" type="file" accept="${accept}">
           ${file ? `
             <div class="file-row">
