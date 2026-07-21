@@ -32,6 +32,7 @@ from api.dependencies import (
     get_onboarding_workflow_service,
     get_operations_workflow,
     get_product_architecture_service,
+    get_recruitment_workflow_service,
     get_rodo_service,
     get_skill_gap_service,
 )
@@ -84,6 +85,7 @@ from api.schemas import (
     OnboardingStepPatch,
     ProfileRecordPayload,
     ProfileSectionPayload,
+    RecruitmentPayload,
     PrivacyRequestCreate,
     SkillGapAnalysisRequest,
     StatusUpdate,
@@ -236,6 +238,11 @@ def agent_dashboard_page() -> str:
     return AGENT_DASHBOARD_HTML
 
 
+@app.get("/agent/applications", response_class=HTMLResponse)
+def agent_applications_page() -> str:
+    return _candidate_applications_html()
+
+
 @app.get("/{language_code}/agent/dashboard", response_class=HTMLResponse)
 def localized_agent_dashboard_page(language_code: str) -> str:
     return AGENT_DASHBOARD_HTML
@@ -269,6 +276,11 @@ def employer_onboarding_page() -> str:
 @app.get("/employer/dashboard", response_class=HTMLResponse)
 def employer_dashboard_page() -> str:
     return EMPLOYER_DASHBOARD_HTML
+
+
+@app.get("/employer/recruitment", response_class=HTMLResponse)
+def employer_recruitment_page() -> str:
+    return _employer_recruitment_html()
 
 
 @app.get("/api/employer/onboarding")
@@ -1708,15 +1720,276 @@ def verify_employer(employer_id: str, request: Request, payload: VerificationUpd
 
 
 @app.get("/api/vacancies")
-def list_vacancies(request: Request) -> list[dict]:
-    _require_admin(request)
-    return [vacancy.to_dict() for vacancy in get_crm_service().vacancies.list()]
+def list_vacancies(request: Request, companyId: str | None = None, status: str | None = None, limit: int = 25, offset: int = 0) -> dict:
+    try:
+        return get_recruitment_workflow_service().list_vacancies(
+            _onboarding_owner_id(request),
+            {"companyId": companyId, "status": status, "limit": limit, "offset": offset},
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
 
 
 @app.post("/api/vacancies")
-def create_vacancy(payload: VacancyCreate) -> dict:
-    vacancy = Vacancy(**payload.model_dump())
-    return get_operations_workflow().publish_vacancy(vacancy)
+def create_vacancy(payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().create_vacancy(_onboarding_owner_id(request), payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/vacancies/{vacancy_id}")
+def get_vacancy(vacancy_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().get_vacancy(_onboarding_owner_id(request), vacancy_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/api/vacancies/{vacancy_id}")
+def update_recruitment_vacancy(vacancy_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().update_vacancy(_onboarding_owner_id(request), vacancy_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/vacancies/{vacancy_id}/publish")
+def publish_recruitment_vacancy(vacancy_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().publish_vacancy(_onboarding_owner_id(request), vacancy_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/vacancies/{vacancy_id}/pause")
+def pause_recruitment_vacancy(vacancy_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().pause_vacancy(_onboarding_owner_id(request), vacancy_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/vacancies/{vacancy_id}/close")
+def close_recruitment_vacancy(vacancy_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().close_vacancy(_onboarding_owner_id(request), vacancy_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/public/jobs/{vacancy_id}")
+def get_public_job(vacancy_id: str) -> dict:
+    try:
+        return get_recruitment_workflow_service().get_public_job(vacancy_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/jobs/{vacancy_id}", response_class=HTMLResponse)
+def public_job_page(vacancy_id: str) -> str:
+    try:
+        job = get_recruitment_workflow_service().get_public_job(vacancy_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return _job_page_html(job)
+
+
+@app.post("/api/vacancies/{vacancy_id}/applications")
+def submit_job_application(vacancy_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().submit_application(_onboarding_owner_id(request), vacancy_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/applications")
+def list_applications(request: Request, status: str | None = None, vacancyId: str | None = None, limit: int = 25, offset: int = 0) -> dict:
+    candidate_view = request.query_params.get("view") == "candidate"
+    try:
+        return get_recruitment_workflow_service().list_applications(
+            _onboarding_owner_id(request),
+            {"status": status, "vacancyId": vacancyId, "limit": limit, "offset": offset},
+            candidate=candidate_view,
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.get("/api/applications/{application_id}")
+def get_application(application_id: str, request: Request) -> dict:
+    candidate_view = request.query_params.get("view") == "candidate"
+    try:
+        return get_recruitment_workflow_service().application_detail(_onboarding_owner_id(request), application_id, candidate=candidate_view)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/applications/{application_id}/withdraw")
+def withdraw_application(application_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().withdraw_application(_onboarding_owner_id(request), application_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/employer/vacancies/{vacancy_id}/applications")
+def list_employer_vacancy_applications(vacancy_id: str, request: Request, status: str | None = None, limit: int = 25, offset: int = 0) -> dict:
+    try:
+        return get_recruitment_workflow_service().list_applications(
+            _onboarding_owner_id(request),
+            {"vacancyId": vacancy_id, "status": status, "limit": limit, "offset": offset},
+        )
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.patch("/api/applications/{application_id}/stage")
+def transition_application_stage(application_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().transition_stage(_onboarding_owner_id(request), application_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/applications/{application_id}/notes")
+def add_application_note(application_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().add_note(_onboarding_owner_id(request), application_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/applications/{application_id}/interviews")
+def list_application_interviews(application_id: str, request: Request) -> list[dict]:
+    try:
+        return get_recruitment_workflow_service().list_interviews(_onboarding_owner_id(request), application_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/applications/{application_id}/interviews")
+def schedule_application_interview(application_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().schedule_interview(_onboarding_owner_id(request), application_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/interviews/{interview_id}")
+def update_interview(interview_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().update_interview(_onboarding_owner_id(request), interview_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/interviews/{interview_id}/cancel")
+def cancel_interview(interview_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().cancel_interview(_onboarding_owner_id(request), interview_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/interviews/{interview_id}/feedback")
+def add_interview_feedback(interview_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().add_interview_feedback(_onboarding_owner_id(request), interview_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/applications/{application_id}/evaluations")
+def submit_candidate_evaluation(application_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().submit_evaluation(_onboarding_owner_id(request), application_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/applications/{application_id}/offers")
+def create_job_offer(application_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().create_offer(_onboarding_owner_id(request), application_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/offers/{offer_id}")
+def update_job_offer(offer_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().update_offer(_onboarding_owner_id(request), offer_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/offers/{offer_id}/send")
+def send_job_offer(offer_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().send_offer(_onboarding_owner_id(request), offer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/offers/{offer_id}/accept")
+def accept_job_offer(offer_id: str, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().accept_offer(_onboarding_owner_id(request), offer_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/offers/{offer_id}/decline")
+def decline_job_offer(offer_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    try:
+        return get_recruitment_workflow_service().decline_offer(_onboarding_owner_id(request), offer_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.patch("/api/vacancies/{vacancy_id}/status")
@@ -1793,6 +2066,104 @@ def update_match_status(match_id: str, payload: StatusUpdate, request: Request) 
 def list_activity(request: Request, limit: int = 50) -> list[dict]:
     _require_admin(request)
     return [event.to_dict() for event in get_crm_service().list_activity(limit=limit)]
+
+
+def _job_page_html(payload: dict) -> str:
+    job = payload.get("job", {})
+    company = payload.get("company", {})
+    salary = job.get("salary") or {}
+    salary_text = "Salary hidden"
+    if salary.get("visible", True) and (salary.get("minimum") or salary.get("maximum")):
+        salary_text = f"{salary.get('minimum') or ''} - {salary.get('maximum') or ''} {salary.get('currency') or ''} {salary.get('period') or ''} {salary.get('grossNet') or ''}".strip()
+    requirements = "".join(f"<li>{_html_escape(item.get('label', ''))}</li>" for item in job.get("requirements", []))
+    responsibilities = "".join(f"<li>{_html_escape(item)}</li>" for item in job.get("responsibilities", []))
+    benefits = "".join(f"<span class='chip'>{_html_escape(item.get('label') or item)}</span>" for item in job.get("benefits", []))
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{_html_escape(job.get('title', 'ATLAS Job'))}</title>
+  <style>
+    :root {{ --bg:#020714; --panel:rgba(255,255,255,.08); --line:rgba(238,241,246,.16); --gold:#d4af37; --text:#eef1f6; --muted:rgba(238,241,246,.72); }}
+    * {{ box-sizing:border-box; min-width:0; }}
+    body {{ margin:0; min-height:100vh; background:radial-gradient(circle at 20% 0%, rgba(212,175,55,.14), transparent 30%), #020714; color:var(--text); font-family:Inter, system-ui, Segoe UI, sans-serif; }}
+    main {{ width:min(980px,100%); margin:0 auto; padding:28px clamp(16px,4vw,44px) 48px; }}
+    header,.card {{ border:1px solid var(--line); border-radius:8px; background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.035)); padding:22px; margin-bottom:16px; }}
+    h1,h2 {{ margin:0 0 12px; }} p,li {{ color:var(--muted); line-height:1.55; }}
+    .meta {{ display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }}
+    .chip {{ display:inline-flex; border:1px solid var(--line); border-radius:999px; padding:6px 10px; color:var(--muted); }}
+    .button {{ min-height:44px; border-radius:8px; padding:0 16px; background:linear-gradient(135deg,#ffe27a,#d4af37 52%,#a97818); color:#130f05; text-decoration:none; font-weight:800; display:inline-grid; place-items:center; }}
+    .grid {{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }}
+    @media (max-width:760px){{ .grid{{grid-template-columns:1fr;}} .button{{width:100%;}} }}
+  </style>
+</head>
+<body><main>
+  <header>
+    <div class="chip">ATLAS by EWU</div>
+    <h1>{_html_escape(job.get('title', 'Vacancy'))}</h1>
+    <p>{_html_escape(company.get('tradingName') or company.get('legalName') or 'Company')} · verification: {_html_escape(company.get('verificationStatus', 'unverified'))}</p>
+    <div class="meta"><span class="chip">{_html_escape(', '.join(job.get('workModes', [])))}</span><span class="chip">{_html_escape(str(job.get('quantity', 1)))} opening(s)</span><span class="chip">{_html_escape(salary_text)}</span></div>
+    <a class="button" href="/agent/onboarding">Apply with ATLAS profile</a>
+  </header>
+  <section class="card"><h2>Description</h2><p>{_html_escape(job.get('description', ''))}</p></section>
+  <section class="grid"><article class="card"><h2>Requirements</h2><ul>{requirements or '<li>No public requirements listed.</li>'}</ul></article><article class="card"><h2>Responsibilities</h2><ul>{responsibilities or '<li>Details will be confirmed during recruitment.</li>'}</ul></article></section>
+  <section class="card"><h2>Candidate support</h2><div class="meta">{benefits or '<span class="chip">No public benefits listed</span>'}<span class="chip">Housing: {_html_escape(str((job.get('housing') or {{}}).get('provided', False)))}</span><span class="chip">Transport: {_html_escape(str((job.get('transport') or {{}}).get('provided', False)))}</span><span class="chip">Legalization: {_html_escape(str((job.get('legalization') or {{}}).get('provided', False)))}</span></div></section>
+</main></body></html>"""
+
+
+def _candidate_applications_html() -> str:
+    return r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ATLAS | My Applications</title><style>
+:root{--bg:#020714;--line:rgba(238,241,246,.16);--gold:#d4af37;--text:#eef1f6;--muted:rgba(238,241,246,.72)}
+*{box-sizing:border-box;min-width:0}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,rgba(212,175,55,.14),transparent 30%),#020714;color:var(--text);font-family:Inter,system-ui,Segoe UI,sans-serif}
+main{width:min(1080px,100%);margin:0 auto;padding:26px clamp(16px,4vw,42px) 44px}.brand{letter-spacing:.18em;color:#cfd6e6;font-weight:850;margin-bottom:18px}
+.card{border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.035));padding:20px;margin-bottom:14px}h1,h2{margin:0 0 10px}p{color:var(--muted);line-height:1.55}
+.chip{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted);margin:4px 4px 0 0}.button{min-height:40px;border-radius:8px;padding:0 14px;background:linear-gradient(135deg,#ffe27a,#d4af37 52%,#a97818);color:#130f05;text-decoration:none;font-weight:800;display:inline-grid;place-items:center;border:0;cursor:pointer}
+@media(max-width:760px){.button{width:100%}}
+</style></head><body><main><div class="brand">ATLAS by EWU</div><section class="card"><h1>My applications</h1><p>Real application statuses, consent snapshots and required actions.</p></section><section id="apps"></section></main>
+<script>
+const userId=localStorage.getItem("atlas_agent_user_id")||localStorage.getItem("atlas_onboarding_user_id")||"candidate-user";
+localStorage.setItem("atlas_agent_user_id",userId);
+async function api(path,opt={}){const res=await fetch(path,{headers:{"X-ATLAS-User-Id":userId,"Content-Type":"application/json"},...opt});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.detail||"Request failed");return data}
+async function load(){const data=await api("/api/applications?view=candidate");document.getElementById("apps").innerHTML=data.items.length?data.items.map(app=>`<article class="card"><h2>${esc(app.vacancyId)}</h2><span class="chip">${esc(app.displayStatus)}</span><span class="chip">Submitted ${esc(app.submittedAt||"")}</span><p>Consent snapshot: ${esc(app.consentSnapshotId||"")}</p>${app.status==="withdrawn"?"":`<button class="button" onclick="withdraw('${esc(app.id)}')">Withdraw application</button>`}</article>`).join(""):`<article class="card"><h2>No applications yet</h2><p>Applications submitted from public job pages will appear here.</p></article>`}
+async function withdraw(id){await api(`/api/applications/${id}/withdraw`,{method:"POST"});load()}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+load().catch(e=>document.getElementById("apps").innerHTML=`<article class="card">${esc(e.message)}</article>`);
+</script></body></html>"""
+
+
+def _employer_recruitment_html() -> str:
+    return r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ATLAS | Recruitment Board</title><style>
+:root{--bg:#020714;--line:rgba(238,241,246,.16);--gold:#d4af37;--text:#eef1f6;--muted:rgba(238,241,246,.72)}
+*{box-sizing:border-box;min-width:0}body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,rgba(212,175,55,.14),transparent 30%),#020714;color:var(--text);font-family:Inter,system-ui,Segoe UI,sans-serif}
+main{width:min(1220px,100%);margin:0 auto;padding:26px clamp(16px,4vw,42px) 44px}.brand{letter-spacing:.18em;color:#cfd6e6;font-weight:850;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.035));padding:18px;margin-bottom:14px}
+h1,h2,h3{margin:0 0 10px}p,td,th{color:var(--muted);line-height:1.5}.chip{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted);margin:4px 4px 0 0}
+table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid var(--line);padding:10px;text-align:left}.button{min-height:40px;border-radius:8px;padding:0 14px;background:linear-gradient(135deg,#ffe27a,#d4af37 52%,#a97818);color:#130f05;text-decoration:none;font-weight:800;display:inline-grid;place-items:center}
+@media(max-width:860px){.grid{grid-template-columns:1fr}.button{width:100%}table{display:block;overflow:auto}}
+</style></head><body><main><div class="brand">ATLAS by EWU</div><section class="card"><h1>Recruitment board</h1><p>Vacancies, applications and pipeline stages from backend data only.</p></section><section class="grid" id="vacancies"></section><section class="card"><h2>Applications</h2><table id="apps"></table></section></main>
+<script>
+const userId=localStorage.getItem("atlas_employer_user_id")||"owner-user";
+async function api(path,opt={}){const res=await fetch(path,{headers:{"X-ATLAS-User-Id":userId,"Content-Type":"application/json"},...opt});const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data.detail||"Request failed");return data}
+async function load(){const dash=await api("/api/employer/dashboard");const companyId=dash.company?.id;const vacancies=companyId?await api(`/api/vacancies?companyId=${encodeURIComponent(companyId)}`):{items:[]};document.getElementById("vacancies").innerHTML=vacancies.items.map(v=>`<article class="card"><h2>${esc(v.title)}</h2><span class="chip">${esc(v.status)}</span><span class="chip">${esc(v.quantity)} opening(s)</span><p>${esc(v.description)}</p><a class="button" href="/jobs/${esc(v.id)}">Public page</a></article>`).join("")||"<article class='card'>No vacancies yet.</article>";let rows=[];for(const v of vacancies.items){const apps=await api(`/api/employer/vacancies/${v.id}/applications`);rows.push(...apps.items.map(app=>`<tr><td>${esc(v.title)}</td><td>${esc(app.candidateName||app.candidateUserId)}</td><td>${esc(app.status)}</td><td>${esc(app.pipelineStageId)}</td><td>${esc(app.updatedAt||"")}</td></tr>`))}document.getElementById("apps").innerHTML=`<tr><th>Vacancy</th><th>Candidate</th><th>Status</th><th>Stage</th><th>Last activity</th></tr>${rows.join("")||"<tr><td colspan='5'>No applications yet.</td></tr>"}`}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
+load().catch(e=>document.getElementById("apps").innerHTML=`<tr><td>${esc(e.message)}</td></tr>`);
+</script></body></html>"""
+
+
+def _html_escape(value: object) -> str:
+    return (
+        str(value or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#039;")
+    )
 
 
 def _valid_admin_password(password: str) -> bool:

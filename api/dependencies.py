@@ -66,6 +66,7 @@ from services.dynamic_interview import DynamicInterviewService
 from services.entitlements import EntitlementRepositories, EntitlementService
 from services.rodo_service import RodoService
 from services.onboarding_workflow import OnboardingWorkflowService
+from services.recruitment_workflow import RecruitmentWorkflowService
 from services.skill_gap_analysis import SkillGapService
 from services.product_architecture import ProductArchitectureService
 from workflows.operations_workflow import OperationsWorkflow
@@ -132,6 +133,16 @@ def get_employer_onboarding_workflow_service() -> EmployerOnboardingWorkflowServ
         database=database,
         employers=EmployerRepository(database),
         documents=DocumentRepository(database),
+        activity=ActivityRepository(database),
+    )
+
+
+def get_recruitment_workflow_service() -> RecruitmentWorkflowService:
+    database = get_database()
+    return RecruitmentWorkflowService(
+        database=database,
+        vacancies=VacancyRepository(database),
+        candidates=CandidateRepository(database),
         activity=ActivityRepository(database),
     )
 
