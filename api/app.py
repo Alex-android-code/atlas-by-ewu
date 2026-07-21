@@ -29,6 +29,7 @@ from api.dependencies import (
     get_dynamic_interview_service,
     get_entitlement_service,
     get_employer_onboarding_workflow_service,
+    get_matching_engine_service,
     get_onboarding_workflow_service,
     get_operations_workflow,
     get_product_architecture_service,
@@ -82,6 +83,7 @@ from api.schemas import (
     CompanyMemberPatch,
     LoginRequest,
     MatchRequest,
+    MatchingRunPayload,
     OnboardingStepPatch,
     ProfileRecordPayload,
     ProfileSectionPayload,
@@ -243,6 +245,11 @@ def agent_applications_page() -> str:
     return _candidate_applications_html()
 
 
+@app.get("/agent/matching/{match_id}", response_class=HTMLResponse)
+def agent_matching_page(match_id: str) -> str:
+    return _matching_page_html(match_id, view="candidate")
+
+
 @app.get("/{language_code}/agent/dashboard", response_class=HTMLResponse)
 def localized_agent_dashboard_page(language_code: str) -> str:
     return AGENT_DASHBOARD_HTML
@@ -281,6 +288,11 @@ def employer_dashboard_page() -> str:
 @app.get("/employer/recruitment", response_class=HTMLResponse)
 def employer_recruitment_page() -> str:
     return _employer_recruitment_html()
+
+
+@app.get("/employer/matching/{match_id}", response_class=HTMLResponse)
+def employer_matching_page(match_id: str) -> str:
+    return _matching_page_html(match_id, view="employer")
 
 
 @app.get("/api/employer/onboarding")
@@ -1992,6 +2004,43 @@ def decline_job_offer(offer_id: str, payload: RecruitmentPayload, request: Reque
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@app.post("/api/matching/run")
+def run_matching_engine(payload: MatchingRunPayload, request: Request) -> dict:
+    try:
+        return get_matching_engine_service().run(
+            candidate_id=payload.candidate_id,
+            vacancy_id=payload.vacancy_id,
+            limit=payload.limit,
+            actor_id=_onboarding_owner_id(request),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/matching/{match_id}")
+def get_matching_result(match_id: str) -> dict:
+    try:
+        return get_matching_engine_service().get(match_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/matching/{match_id}/explanation")
+def get_matching_explanation(match_id: str) -> dict:
+    try:
+        return get_matching_engine_service().explanation(match_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/matching/{match_id}/recalculate")
+def recalculate_matching_result(match_id: str, request: Request) -> dict:
+    try:
+        return get_matching_engine_service().recalculate(match_id, actor_id=_onboarding_owner_id(request))
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
 @app.patch("/api/vacancies/{vacancy_id}/status")
 def update_vacancy_status(vacancy_id: str, payload: StatusUpdate, request: Request) -> dict:
     _require_admin(request)
@@ -2152,6 +2201,27 @@ async function api(path,opt={}){const res=await fetch(path,{headers:{"X-ATLAS-Us
 async function load(){const dash=await api("/api/employer/dashboard");const companyId=dash.company?.id;const vacancies=companyId?await api(`/api/vacancies?companyId=${encodeURIComponent(companyId)}`):{items:[]};document.getElementById("vacancies").innerHTML=vacancies.items.map(v=>`<article class="card"><h2>${esc(v.title)}</h2><span class="chip">${esc(v.status)}</span><span class="chip">${esc(v.quantity)} opening(s)</span><p>${esc(v.description)}</p><a class="button" href="/jobs/${esc(v.id)}">Public page</a></article>`).join("")||"<article class='card'>No vacancies yet.</article>";let rows=[];for(const v of vacancies.items){const apps=await api(`/api/employer/vacancies/${v.id}/applications`);rows.push(...apps.items.map(app=>`<tr><td>${esc(v.title)}</td><td>${esc(app.candidateName||app.candidateUserId)}</td><td>${esc(app.status)}</td><td>${esc(app.pipelineStageId)}</td><td>${esc(app.updatedAt||"")}</td></tr>`))}document.getElementById("apps").innerHTML=`<tr><th>Vacancy</th><th>Candidate</th><th>Status</th><th>Stage</th><th>Last activity</th></tr>${rows.join("")||"<tr><td colspan='5'>No applications yet.</td></tr>"}`}
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]))}
 load().catch(e=>document.getElementById("apps").innerHTML=`<tr><td>${esc(e.message)}</td></tr>`);
+</script></body></html>"""
+
+
+def _matching_page_html(match_id: str, view: str) -> str:
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ATLAS | Match Explanation</title><style>
+:root{{--bg:#020714;--line:rgba(238,241,246,.16);--gold:#d4af37;--text:#eef1f6;--muted:rgba(238,241,246,.72)}}
+*{{box-sizing:border-box;min-width:0}}body{{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,rgba(212,175,55,.14),transparent 30%),#020714;color:var(--text);font-family:Inter,system-ui,Segoe UI,sans-serif}}
+main{{width:min(1040px,100%);margin:0 auto;padding:26px clamp(16px,4vw,42px) 44px}}.brand{{letter-spacing:.18em;color:#cfd6e6;font-weight:850;margin-bottom:18px}}
+.grid{{display:grid;grid-template-columns:1fr 1fr;gap:14px}}.card{{border:1px solid var(--line);border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.035));padding:20px;margin-bottom:14px}}
+h1,h2{{margin:0 0 10px}}p,li{{color:var(--muted);line-height:1.55}}.score{{font-size:58px;color:var(--gold);font-weight:900}}.chip{{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:6px 10px;color:var(--muted);margin:4px 4px 0 0}}
+@media(max-width:760px){{.grid{{grid-template-columns:1fr}}}}
+</style></head><body><main><div class="brand">ATLAS by EWU</div><section id="match" class="card">Loading...</section></main>
+<script>
+const matchId="{_html_escape(match_id)}"; const view="{_html_escape(view)}";
+async function load(){{const res=await fetch(`/api/matching/${{matchId}}`);const data=await res.json();if(!res.ok)throw new Error(data.detail||"Match not found");const exp=data.explanation||{{}};const selected=view==="candidate"?data.candidateView:data.employerView;document.getElementById("match").innerHTML=`<h1>${{esc(data.recommendation?.label||"Match")}}</h1><div class="score">${{esc(data.score)}}%</div><span class="chip">Human decision required</span><span class="chip">AI recommends, human decides</span><div class="grid"><article class="card"><h2>Component scores</h2>${{components(exp.componentScores||{{}})}}</article><article class="card"><h2>${{view==="candidate"?"Why this fits":"Recruiter explanation"}}</h2>${{list(selected?.whyThisFits||selected?.strengths||exp.positiveReasons||[])}}</article></div><div class="grid"><article class="card"><h2>Risks</h2>${{list(selected?.risks||exp.risks||[])}}</article><article class="card"><h2>Recommendations</h2>${{list(selected?.whatToImprove||selected?.recommendations||exp.recommendations||[])}}</article></div>`}}
+function components(obj){{return Object.entries(obj).map(([k,v])=>`<p><strong>${{esc(k)}}</strong>: ${{esc(v)}}%</p>`).join("")}}
+function list(items){{return items.length?`<ul>${{items.map(i=>`<li>${{esc(i)}}</li>`).join("")}}</ul>`:"<p>No items.</p>"}}
+function esc(v){{return String(v??"").replace(/[&<>"']/g,c=>({{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}}[c]))}}
+load().catch(e=>document.getElementById("match").textContent=e.message);
 </script></body></html>"""
 
 

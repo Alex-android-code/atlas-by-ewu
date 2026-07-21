@@ -67,6 +67,7 @@ from services.entitlements import EntitlementRepositories, EntitlementService
 from services.rodo_service import RodoService
 from services.onboarding_workflow import OnboardingWorkflowService
 from services.recruitment_workflow import RecruitmentWorkflowService
+from services.matching_engine import MatchingEngineService
 from services.skill_gap_analysis import SkillGapService
 from services.product_architecture import ProductArchitectureService
 from workflows.operations_workflow import OperationsWorkflow
@@ -143,6 +144,17 @@ def get_recruitment_workflow_service() -> RecruitmentWorkflowService:
         database=database,
         vacancies=VacancyRepository(database),
         candidates=CandidateRepository(database),
+        activity=ActivityRepository(database),
+    )
+
+
+def get_matching_engine_service() -> MatchingEngineService:
+    database = get_database()
+    return MatchingEngineService(
+        candidates=CandidateRepository(database),
+        vacancies=VacancyRepository(database),
+        profiles=ProfessionalDNARepository(database),
+        matches=MatchRepository(database),
         activity=ActivityRepository(database),
     )
 

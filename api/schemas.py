@@ -380,3 +380,9 @@ class CompanyMemberPatch(BaseModel):
 
 class RecruitmentPayload(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class MatchingRunPayload(BaseModel):
+    candidate_id: str | None = None
+    vacancy_id: str | None = None
+    limit: int = Field(default=100, ge=1, le=1000)
