@@ -113,7 +113,11 @@ async function dropVirtualFile(page, selector, name, mimeType, content) {
 
   await page.click('[data-action="generate-dna"]');
   await page.waitForSelector(".dna-score");
-  await next(page);
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/onboarding/complete") && response.ok()),
+    page.click("#next"),
+  ]);
+  await page.waitForSelector("text=Профіль створено");
 
   await page.goto(`${baseUrl}/agent/dashboard`, { waitUntil: "networkidle" });
   await page.waitForSelector(".score");

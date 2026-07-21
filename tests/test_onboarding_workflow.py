@@ -212,15 +212,50 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
 
     def test_generates_dna_and_completes(self) -> None:
         self.service.patch_step("user-1", step="agent", data={"name": "Ava"})
-        self.service.patch_step("user-1", step="profession", data={"skills": ["Python"]})
+        self.service.patch_step("user-1", step="profile_photo", data={"file": {"id": "PHOTO", "original_name": "avatar.png"}})
+        self.service.patch_step("user-1", step="cv", data={"file": {"id": "CV", "original_name": "cv.pdf"}})
+        job = self.service.parse_cv("user-1", "CV")
+        self.service.patch_step("user-1", step="cv_review", data={"job_id": job["id"], "accepted_parsed_data": {"email": {"value": "worker@example.com"}}})
+        self.service.patch_step("user-1", step="personal_data", data={"fullName": "Ava Worker", "email": "worker@example.com"})
+        self.service.patch_step("user-1", step="profession", data={"profession": "Logistics coordinator", "skills": ["Python"]})
+        self.service.patch_step("user-1", step="preferences", data={"countries": ["PL"], "minimumSalary": "5000"})
+        self.service.patch_step(
+            "user-1",
+            step="consents",
+            data={"terms": True, "privacy": True, "platformProcessing": True, "profileStorage": True, "documentProcessing": True},
+        )
 
         dna = self.service.generate_dna("user-1")
         completed = self.service.complete("user-1")
+        retried = self.service.complete("user-1")
+        dashboard = self.service.dashboard("user-1")
 
         self.assertEqual(dna["version"], "professional_dna_v1_rule_based")
         self.assertIn("formula", dna)
         self.assertEqual(completed["session"]["status"], "completed")
         self.assertEqual(completed["session"]["current_step"], "completed")
+        self.assertEqual(retried["session"]["status"], "completed")
+        self.assertEqual(dashboard["onboarding"]["redirectTo"], None)
+        self.assertIn("readiness", dashboard)
+        self.assertIn("recommendedActions", dashboard)
+        self.assertNotIn("raw_text", json.dumps(dashboard).lower())
+
+    def test_completion_requires_mandatory_steps_and_consents(self) -> None:
+        self.service.patch_step("user-1", step="agent", data={"name": "Ava"})
+
+        with self.assertRaises(ValueError) as error:
+            self.service.complete("user-1")
+
+        self.assertIn("Incomplete onboarding steps", str(error.exception))
+        self.assertIn("Required consents", str(error.exception))
+
+    def test_dashboard_redirects_unfinished_onboarding(self) -> None:
+        self.service.patch_step("user-1", step="agent", data={"name": "Ava"})
+
+        dashboard = self.service.dashboard("user-1")
+
+        self.assertEqual(dashboard["onboarding"]["status"], "in_progress")
+        self.assertIn("/agent/onboarding?step=", dashboard["onboarding"]["redirectTo"])
 
     def test_professional_dna_uses_configured_weights_and_structured_explanation(self) -> None:
         config = json.loads(DNA_SCORING_CONFIG.read_text(encoding="utf-8"))

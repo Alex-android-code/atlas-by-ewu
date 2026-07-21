@@ -776,7 +776,10 @@ def patch_onboarding_session(payload: OnboardingStepPatch, request: Request) -> 
 @app.post("/api/onboarding/complete")
 def complete_onboarding_workflow(request: Request) -> dict:
     user_id = _onboarding_owner_id(request)
-    result = get_onboarding_workflow_service().complete(user_id)
+    try:
+        result = get_onboarding_workflow_service().complete(user_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     professional_dna = result.get("dashboard", {}).get("professional_dna", {})
     result["crm_sync"] = _sync_agent_profile_to_crm(user_id, professional_dna)
     return result

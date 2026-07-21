@@ -280,7 +280,8 @@ AGENT_ONBOARDING_HTML = r"""
       await ensureUser();
       session = await api("/api/onboarding", {headers: {"X-ATLAS-User-Id": userId}});
       local = structuredClone(session.data || {});
-      current = session.status === "completed" ? "completed" : (session.current_step || "welcome");
+      const requestedStep = new URLSearchParams(location.search).get("step");
+      current = requestedStep && steps.includes(requestedStep) ? requestedStep : (session.status === "completed" ? "completed" : (session.current_step || "welcome"));
       render();
     }
 
@@ -403,10 +404,7 @@ AGENT_ONBOARDING_HTML = r"""
         ${consent("personalizedRecommendations", "Персоналізовані рекомендації", false)}
         ${consent("anonymousAnalytics", "Анонімізована аналітика для покращення сервісу", false)}`,
       professional_dna: () => dnaTemplate(),
-      completed: () => `
-        <h1>Профіль створено</h1>
-        <p class="lead">Онбординг завершено, Professional DNA збережено, а ваш AI-агент готовий працювати в особистому кабінеті.</p>
-        <div class="actions"><a class="primary button" href="/agent/dashboard">Відкрити dashboard</a></div>`
+      completed: () => completionTemplate()
     };
 
     function bindStep() {
@@ -949,6 +947,29 @@ AGENT_ONBOARDING_HTML = r"""
         <div class="grid"><div class="card"><h3>Сильні сторони</h3><ul>${(dna.strengths || []).map((x) => `<li>${escapeHtml(insight(x))}</li>`).join("")}</ul></div><div class="card"><h3>Прогалини</h3><ul>${((dna.gaps || []).length ? dna.gaps : [{title:"Критичних прогалин не знайдено.", description:""}]).map((x) => `<li>${escapeHtml(insight(x))}</li>`).join("")}</ul></div></div>
         <div class="chips">${(dna.recommendations || []).slice(0,5).map((x) => `<span class="chip">${escapeHtml(x.title || x)}</span>`).join("")}</div>
         <p class="small">Scoring: ${escapeHtml(dna.scoringConfigVersion || "professional_dna_scoring_v1")} · ${escapeHtml(dna.generatedAt || "")}</p>`;
+    }
+
+    function completionTemplate() {
+      const dna = local.professional_dna || session?.professional_dna || {};
+      const photo = local.profile_photo?.file;
+      const name = val("personal_data.fullName") || [val("personal_data.firstName"), val("personal_data.lastName")].filter(Boolean).join(" ") || val("agent.name") || "ATLAS User";
+      const profession = val("profession.profession") || val("profession.headline") || "Profile profession is not specified";
+      const completeness = session?.progress?.percent || dna.profileCompleteness || 0;
+      const strengths = (dna.strengths || []).slice(0, 3).map((item) => typeof item === "string" ? item : item.title);
+      const actions = (dna.recommendations || []).slice(0, 3).map((item) => item.title || item);
+      return `<h1>Профіль створено</h1>
+        <p class="lead">Онбординг завершено, Professional DNA збережено, а ваш AI-агент готовий працювати в особистому кабінеті.</p>
+        <div class="grid">
+          <div class="card">
+            <h3>${escapeHtml(name)}</h3>
+            ${photo?.preview_url ? `<div class="preview"><img src="${escapeHtml(photo.preview_url)}" alt="Profile photo"></div>` : ""}
+            <p>${escapeHtml(profession)}</p>
+            <div class="chips"><span class="chip">${escapeHtml(completeness)}% profile completeness</span><span class="chip">${escapeHtml(dna.overallScore || 0)}% DNA score</span></div>
+          </div>
+          <div class="card"><h3>Сильні сторони</h3>${strengths.length ? `<ul>${strengths.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "<p>Дані ще накопичуються.</p>"}</div>
+        </div>
+        <div class="card"><h3>Наступні дії</h3>${actions.length ? `<ul>${actions.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` : "<p>Немає пріоритетних дій для поточного профілю.</p>"}</div>
+        <div class="actions"><a class="primary button" href="/agent/dashboard">Перейти до dashboard</a><a class="secondary button" href="/agent/onboarding?step=personal_data">Переглянути профіль</a><a class="secondary button" href="/agent/onboarding?step=professional_dna">Переглянути Professional DNA</a></div>`;
     }
 
     function formGrid(title, fields) {

@@ -105,17 +105,25 @@ AGENT_DASHBOARD_HTML = r"""
       const userId = await ensureUser();
       const response = await fetch("/api/agent/dashboard", {headers: {"X-ATLAS-User-Id": userId}});
       if (!response.ok) throw new Error("Dashboard недоступний");
-      render(await response.json());
+      const data = await response.json();
+      if (data.onboarding?.redirectTo) {
+        location.href = data.onboarding.redirectTo;
+        return;
+      }
+      render(data);
     }
 
     function render(data) {
       const dna = data.professional_dna || {};
+      const dnaSummary = data.professionalDNA || {};
       const profile = data.profile || {};
+      const profileStatus = data.profile_status || {};
+      const readiness = data.readiness || {};
       const contact = profile.contact_information || {};
       const personal = profile.personal_information || {};
       const cv = data.cv?.file;
       const photo = data.photo?.file;
-      const completeness = Number(profile.profile_completeness || data.onboarding?.progress?.percent || 0);
+      const completeness = Number(profileStatus.completeness || profile.profile_completeness || data.onboarding?.progress?.percent || 0);
       const components = dna.components || {};
       document.getElementById("dashboard").innerHTML = `
         <section class="hero">
@@ -128,9 +136,18 @@ AGENT_DASHBOARD_HTML = r"""
           </div>
           <div class="panel">
             <p class="eyebrow">Professional DNA</p>
-            <div class="score">${dna.overallScore ?? 0}%</div>
-            <p>${escapeHtml(dna.scoringConfigVersion || dna.version || "DNA ще не згенеровано")}</p>
+            <div class="score">${dnaSummary?.overallScore ?? dna.overallScore ?? 0}%</div>
+            <p>${escapeHtml(dnaSummary?.version || dna.scoringConfigVersion || dna.version || "DNA ще не згенеровано")}</p>
           </div>
+        </section>
+        <section class="grid">
+          <article class="card"><h3>Profile Status</h3>
+            <p>Completed: ${(profileStatus.completedSections || []).map(escapeHtml).join(", ") || "none"}</p>
+            <p>Missing: ${(profileStatus.missingSections || []).map(escapeHtml).join(", ") || "none"}</p>
+            ${(profileStatus.problems || []).length ? `<p>Problems: ${(profileStatus.problems || []).map(escapeHtml).join(", ")}</p>` : ""}
+            <a class="button secondary" href="${escapeHtml((profileStatus.editRoutes || {}).personal_data || "/agent/onboarding?step=personal_data")}">Edit profile</a>
+          </article>
+          <article class="card"><h3>Career Readiness</h3>${readinessList(readiness)}</article>
         </section>
         <section class="grid three">
           <article class="card"><h3>Контактні дані</h3>${kv([
@@ -144,14 +161,21 @@ AGENT_DASHBOARD_HTML = r"""
         </section>
         <section class="grid">
           <article class="card"><h3>Документи</h3>${documents(data.documents || [])}</article>
-          <article class="card"><h3>Рекомендації</h3>${recommendations(data.recommendations || dna.recommendations || [])}</article>
+          <article class="card"><h3>Рекомендації</h3>${recommendations(data.recommendedActions || data.recommendations || dna.recommendations || [])}</article>
         </section>
         <section class="grid">
-          <article class="card"><h3>Компоненти DNA</h3>${componentGrid(components)}</article>
+          <article class="card"><h3>Компоненти DNA</h3>
+            ${dnaSummary ? `<p>Strongest: ${(dnaSummary.strongestComponents || []).map(escapeHtml).join(", ") || "none"}</p><p>Weakest: ${(dnaSummary.weakestComponents || []).map(escapeHtml).join(", ") || "none"}</p>` : ""}
+            ${componentGrid(components)}
+          </article>
           <article class="card"><h3>Сильні сторони і прогалини</h3>
             <h4>Сильні сторони</h4>${insights(dna.strengths || [])}
             <h4>Прогалини</h4>${insights(dna.gaps || [], "Критичних прогалин не знайдено.")}
           </article>
+        </section>
+        <section class="grid">
+          <article class="card"><h3>Recent Activity</h3>${activity(data.recentActivity || [])}</article>
+          <article class="card"><h3>Quick Actions</h3>${quickActions(data.quickActions || [])}</article>
         </section>
         <section class="grid three">
           ${(data.unavailable_modules || []).map((item) => `<article class="card empty"><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.reason)}</p><span class="chip">недоступно</span></article>`).join("")}
@@ -175,7 +199,20 @@ AGENT_DASHBOARD_HTML = r"""
     }
     function recommendations(items) {
       if (!items.length) return `<p>Немає rule-based рекомендацій для поточного профілю.</p>`;
-      return `<ul>${items.slice(0, 5).map((item) => `<li><strong>${escapeHtml(item.title || item)}</strong>${item.priority ? ` · ${escapeHtml(item.priority)}` : ""}</li>`).join("")}</ul>`;
+      return `<ul>${items.slice(0, 5).map((item) => `<li><strong>${escapeHtml(item.title || item)}</strong>${item.priority ? ` · ${escapeHtml(item.priority)}` : ""}${item.route ? ` <a href="${escapeHtml(item.route)}">Open</a>` : ""}</li>`).join("")}</ul>`;
+    }
+    function readinessList(readiness) {
+      const entries = Object.entries(readiness);
+      if (!entries.length) return `<p>Readiness data is not available yet.</p>`;
+      return `<div class="kv">${entries.map(([key, value]) => `<div><span>${escapeHtml(key)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>`;
+    }
+    function activity(items) {
+      if (!items.length) return `<p>No real activity has been recorded yet.</p>`;
+      return `<ul>${items.map((item) => `<li><strong>${escapeHtml(item.title)}</strong> · ${escapeHtml(item.createdAt || "")}</li>`).join("")}</ul>`;
+    }
+    function quickActions(items) {
+      if (!items.length) return `<p>No available actions for this profile state.</p>`;
+      return `<div class="actions">${items.map((item) => `<a class="button secondary" href="${escapeHtml(item.route)}">${escapeHtml(item.title)}</a>`).join("")}</div>`;
     }
     function componentGrid(components) {
       const entries = Object.entries(components);

@@ -99,20 +99,57 @@ class OnboardingApiTests(unittest.TestCase):
         self.client.patch(
             "/api/onboarding",
             headers=headers,
-            json={"step": "consents", "data": {"terms": True, "privacy": True, "aiProcessing": True}},
+            json={"step": "personal_data", "data": {"fullName": "Ava Worker", "email": "worker@example.com"}},
+        )
+        self.client.patch(
+            "/api/onboarding",
+            headers=headers,
+            json={"step": "profession", "data": {"profession": "Logistics coordinator", "skills": ["Python", "Logistics"]}},
+        )
+        self.client.patch(
+            "/api/onboarding",
+            headers=headers,
+            json={"step": "preferences", "data": {"countries": ["PL"], "minimumSalary": "5000"}},
+        )
+        self.client.patch(
+            "/api/onboarding",
+            headers=headers,
+            json={
+                "step": "consents",
+                "data": {"terms": True, "privacy": True, "platformProcessing": True, "profileStorage": True, "documentProcessing": True, "aiMatching": False},
+            },
         )
         dna = self.client.post("/api/professional-dna/generate", headers=headers)
         self.assertEqual(dna.status_code, 200)
         self.assertIn("formula", dna.json())
 
         completed = self.client.post("/api/onboarding/complete", headers=headers)
+        self.assertEqual(completed.status_code, 200)
         self.assertEqual(completed.json()["session"]["status"], "completed")
+        retried = self.client.post("/api/onboarding/complete", headers=headers)
+        self.assertEqual(retried.json()["session"]["status"], "completed")
 
         dashboard = self.client.get("/api/agent/dashboard", headers=headers)
         self.assertEqual(dashboard.status_code, 200)
         self.assertTrue(dashboard.json()["documents"])
         self.assertEqual(dashboard.json()["profile"]["contact_information"]["email"], "worker@example.com")
         self.assertEqual(dashboard.json()["professional_dna"]["version"], "professional_dna_v1_rule_based")
+        self.assertEqual(dashboard.json()["onboarding"]["redirectTo"], None)
+        self.assertEqual(dashboard.json()["readiness"]["matchingConsentStatus"], "disabled")
+        self.assertTrue(dashboard.json()["recommendedActions"])
+        self.assertTrue(dashboard.json()["recentActivity"])
+
+    def test_completion_endpoint_rejects_incomplete_onboarding(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+        self.client.patch("/api/onboarding", headers=headers, json={"step": "agent", "data": {"name": "Ava"}})
+
+        completed = self.client.post("/api/onboarding/complete", headers=headers)
+        dashboard = self.client.get("/api/agent/dashboard", headers=headers)
+
+        self.assertEqual(completed.status_code, 400)
+        self.assertIn("Incomplete onboarding steps", completed.json()["detail"])
+        self.assertIn("/agent/onboarding?step=", dashboard.json()["onboarding"]["redirectTo"])
 
     def test_cv_parse_reject_endpoint_records_decision(self) -> None:
         registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})

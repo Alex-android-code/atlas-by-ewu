@@ -502,8 +502,20 @@ class OnboardingWorkflowService:
 
     def complete(self, user_id: str) -> dict[str, Any]:
         session = self.get_or_start(user_id)
+        if session.get("status") == "completed":
+            self._record_activity(user_id, "onboarding_completion_retry", "completed")
+            return {"session": self._with_progress(session), "dashboard": self.dashboard(user_id), "dashboard_route": "/agent/dashboard"}
+        validation = self._completion_validation(user_id, session)
+        if validation["errors"]:
+            session.setdefault("audit_log", []).append(_audit("onboarding_completion_blocked", "completion"))
+            session["updated_at"] = utc_now_iso()
+            self.database.update(SESSION_COLLECTION, user_id, session)
+            self._record_activity(user_id, "onboarding_completion_blocked", "completion")
+            raise ValueError("; ".join(validation["errors"]))
+        session = self.get_or_start(user_id)
         if not session.get("professional_dna"):
             session["professional_dna"] = self.generate_dna(user_id)
+        self._sync_session_to_profile(user_id, session)
         session["status"] = "completed"
         session["current_step"] = "completed"
         if "completed" not in session.setdefault("completed_steps", []):
@@ -514,9 +526,10 @@ class OnboardingWorkflowService:
         self.database.update(SESSION_COLLECTION, user_id, session)
         dashboard = self.agent_profiles.complete_onboarding(user_id)
         self._record_activity(user_id, "onboarding_completed", "completed")
-        return {"session": self._with_progress(session), "dashboard": dashboard.get("dashboard", {})}
+        return {"session": self._with_progress(session), "dashboard": self.dashboard(user_id), "agent_dashboard": dashboard.get("dashboard", {}), "dashboard_route": "/agent/dashboard"}
 
     def dashboard(self, user_id: str) -> dict[str, Any]:
+        started_at = time.perf_counter()
         session = self.get_or_start(user_id)
         profile = self.agent_profiles.get_or_create_profile(user_id).to_dict()
         dna = session.get("professional_dna") or self.database.get(DNA_COLLECTION, user_id)
@@ -526,20 +539,38 @@ class OnboardingWorkflowService:
             if item.owner_id == user_id and item.metadata.get("onboarding_file_id")
         ]
         agent = profile.get("metadata", {}).get("ai_agent", {})
-        recommendations = []
-        if dna:
-            recommendations = [
-                {"type": "rule_based", "title": item, "source": dna.get("version", "professional_dna_v1_rule_based")}
-                for item in dna.get("recommendedActions", [])
-            ]
-        return {
+        profile_status = _dashboard_profile_status(profile, session)
+        readiness = _dashboard_readiness(profile, session, documents, self.has_consent(user_id, "aiMatching"))
+        normalized_dna = _dashboard_dna(dna)
+        recommended_actions = _dashboard_actions(profile_status, readiness, dna)
+        activity = _dashboard_activity(self.activity.list(), user_id)
+        response_time_ms = round((time.perf_counter() - started_at) * 1000, 2)
+        self._record_activity(user_id, "dashboard_opened", f"{response_time_ms}ms")
+        response = {
             "user_id": user_id,
+            "user": {
+                "id": user_id,
+                "displayName": _display_name(profile, agent),
+                "photoUrl": _file_url(session.get("data", {}).get("profile_photo", {}).get("file")),
+                "primaryProfession": _primary_profession(profile),
+            },
             "onboarding": {
                 "status": session.get("status"),
                 "current_step": session.get("current_step"),
                 "progress": session.get("progress"),
                 "completed_at": session.get("completed_at"),
+                "completedAt": session.get("completed_at"),
+                "redirectTo": None if session.get("status") == "completed" else f"/agent/onboarding?step={session.get('current_step') or 'welcome'}",
             },
+            "profile_status": profile_status,
+            "profileSummary": profile_status,
+            "professionalDNA": normalized_dna,
+            "readiness": readiness,
+            "recommendedActions": recommended_actions,
+            "recentActivity": activity,
+            "quickActions": _dashboard_quick_actions(profile_status, readiness, bool(dna)),
+            "dashboardRoute": "/agent/dashboard",
+            "responseTimeMs": response_time_ms,
             "agent": {
                 "name": agent.get("name") or "ATLAS Agent",
                 "language": agent.get("language") or "uk",
@@ -551,12 +582,36 @@ class OnboardingWorkflowService:
             "photo": session.get("data", {}).get("profile_photo", {}),
             "documents": documents,
             "professional_dna": dna,
-            "recommendations": recommendations,
+            "recommendations": recommended_actions,
             "unavailable_modules": [
                 {"key": "vacancies", "title": "Vacancy matching", "reason": "No live recommendations generated yet."},
                 {"key": "employer_messages", "title": "Employer messages", "reason": "Available after profile publication and employer contact."},
             ],
         }
+        return response
+
+    def _completion_validation(self, user_id: str, session: dict[str, Any]) -> dict[str, Any]:
+        data = session.get("data", {})
+        required_steps = ["agent", "profile_photo", "cv", "cv_review", "personal_data", "profession", "preferences", "consents"]
+        missing_steps = [step for step in required_steps if step not in session.get("completed_steps", []) or not data.get(step)]
+        errors: list[str] = []
+        if missing_steps:
+            errors.append(f"Incomplete onboarding steps: {', '.join(missing_steps)}")
+        if not self.consent_center(user_id)["canContinue"]:
+            errors.append("Required consents are missing")
+        profile = self.agent_profiles.get_or_create_profile(user_id).to_dict()
+        if not (profile.get("contact_information", {}).get("email") or data.get("personal_data", {}).get("email")):
+            errors.append("Profile email is missing")
+        if not (profile.get("professional_summary") or data.get("profession", {}).get("profession")):
+            errors.append("Primary profession is missing")
+        if data.get("cv", {}).get("parse_rejected") and not data.get("cv", {}).get("file"):
+            errors.append("CV is missing")
+        return {"ok": not errors, "errors": errors, "missing_steps": missing_steps}
+
+    def _sync_session_to_profile(self, user_id: str, session: dict[str, Any]) -> None:
+        for step, data in session.get("data", {}).items():
+            if step in {"agent", "personal_data", "profession", "experience", "education", "languages", "preferences", "profile_photo", "cv"}:
+                self._sync_step_to_profile(user_id, step, data if isinstance(data, dict) else {})
 
     def profile(self, user_id: str) -> dict[str, Any]:
         profile = self.agent_profiles.get_or_create_profile(user_id)
@@ -1563,6 +1618,192 @@ def _profile_completeness(profile: Any, session: dict[str, Any]) -> dict[str, An
 
 def _consent_catalog() -> dict[str, Any]:
     return json.loads(CONSENT_POLICY_CONFIG.read_text(encoding="utf-8"))
+
+
+def _display_name(profile: dict[str, Any], agent: dict[str, Any]) -> str:
+    return (
+        profile.get("personal_information", {}).get("full_name")
+        or profile.get("contact_information", {}).get("full_name")
+        or agent.get("name")
+        or "ATLAS User"
+    )
+
+
+def _primary_profession(profile: dict[str, Any]) -> str:
+    roles = profile.get("preferred_roles") or []
+    return profile.get("professional_summary") or (roles[0] if roles else "")
+
+
+def _file_url(file_data: dict[str, Any] | None) -> str:
+    if not file_data:
+        return ""
+    if file_data.get("preview_url"):
+        return str(file_data["preview_url"])
+    if file_data.get("download_url"):
+        return str(file_data["download_url"])
+    return ""
+
+
+def _dashboard_profile_status(profile: dict[str, Any], session: dict[str, Any]) -> dict[str, Any]:
+    data = session.get("data", {})
+    checks = {
+        "agent": bool(profile.get("metadata", {}).get("ai_agent") or data.get("agent")),
+        "photo": bool(profile.get("profile_photo") or data.get("profile_photo", {}).get("file")),
+        "cv": bool(profile.get("uploaded_cv") or data.get("cv", {}).get("file")),
+        "personal_data": bool(profile.get("contact_information", {}).get("email") or data.get("personal_data", {}).get("email")),
+        "profession": bool(_primary_profession(profile) or data.get("profession", {}).get("profession")),
+        "experience": bool(profile.get("work_experience") or data.get("experience", {}).get("records")),
+        "education": bool(profile.get("education") or profile.get("certificates") or data.get("education", {}).get("records")),
+        "languages": bool(profile.get("languages") or data.get("languages", {}).get("records")),
+        "preferences": bool(profile.get("career_goals") or profile.get("relocation_preferences") or data.get("preferences")),
+        "consents": bool(data.get("consents")),
+    }
+    completed = [key for key, value in checks.items() if value]
+    missing = [key for key, value in checks.items() if not value]
+    problems = []
+    if data.get("cv", {}).get("parse_rejected"):
+        problems.append("cv_parse_rejected")
+    expired = _expired_documents(profile)
+    if expired:
+        problems.append("expired_documents")
+    return {
+        "completeness": int(profile.get("profile_completeness") or _profile_completeness_from_data(data, profile)),
+        "completedSections": completed,
+        "missingSections": missing,
+        "problems": problems,
+        "expiringDocuments": _expiring_documents(profile),
+        "expiredDocuments": expired,
+        "editRoutes": {key: f"/agent/onboarding?step={key}" for key in missing or completed},
+    }
+
+
+def _dashboard_dna(dna: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not dna:
+        return None
+    components = dna.get("components") or {}
+    ranked = sorted(components.items(), key=lambda item: item[1].get("score", 0), reverse=True)
+    return {
+        "overallScore": dna.get("overallScore", 0),
+        "generatedAt": dna.get("generatedAt", ""),
+        "version": dna.get("scoringConfigVersion") or dna.get("version", ""),
+        "strongestComponents": [key for key, _ in ranked[:3]],
+        "weakestComponents": [key for key, _ in ranked[-2:]],
+        "components": components,
+        "formula": dna.get("formula", {}),
+    }
+
+
+def _dashboard_readiness(profile: dict[str, Any], session: dict[str, Any], documents: list[dict[str, Any]], matching_enabled: bool) -> dict[str, str]:
+    data = session.get("data", {})
+    cv_data = data.get("cv", {})
+    if not cv_data.get("file") and not profile.get("uploaded_cv"):
+        cv_status = "missing"
+    elif cv_data.get("parse_job_status") in {"queued", "extracting_text", "parsing"}:
+        cv_status = "processing"
+    elif cv_data.get("parse_rejected") or (session.get("parsed_cv") and session.get("parsed_cv", {}).get("status") == "awaiting_review"):
+        cv_status = "needs_review"
+    else:
+        cv_status = "uploaded"
+    profile_status = "complete" if (profile.get("profile_completeness") or 0) >= 80 else "incomplete"
+    doc_statuses = [str(item.get("status") or "").lower() for item in documents]
+    if any(status == "rejected" for status in doc_statuses):
+        documents_status = "rejected"
+    elif _expired_documents(profile):
+        documents_status = "expired"
+    elif _expiring_documents(profile):
+        documents_status = "expiring"
+    elif documents:
+        documents_status = "uploaded"
+    else:
+        documents_status = "missing"
+    work_auth = data.get("personal_data", {}).get("workPermitCountries") or profile.get("document_status", {}).get("work_authorization")
+    preferences_complete = bool(data.get("preferences") or profile.get("career_goals") or profile.get("relocation_preferences"))
+    return {
+        "cvStatus": cv_status,
+        "profileStatus": profile_status,
+        "documentsStatus": documents_status,
+        "workAuthorizationStatus": "confirmed" if work_auth else "unknown",
+        "preferencesStatus": "complete" if preferences_complete else "incomplete",
+        "matchingConsentStatus": "enabled" if matching_enabled else "disabled",
+    }
+
+
+def _dashboard_actions(profile_status: dict[str, Any], readiness: dict[str, str], dna: dict[str, Any] | None) -> list[dict[str, Any]]:
+    actions: list[dict[str, Any]] = []
+    def add(action_id: str, title: str, description: str, priority: str, source: str, action_type: str, route: str = "") -> None:
+        actions.append({
+            "id": action_id,
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "source": source,
+            "actionType": action_type,
+            **({"route": route} if route else {}),
+        })
+
+    if readiness["cvStatus"] in {"missing", "needs_review"}:
+        add("cv_action", "Додайте або перевірте CV", "CV потрібне для якісної професійної карти.", "high", "document", "open_onboarding_step", "/agent/onboarding?step=cv")
+    if "education" in profile_status.get("missingSections", []):
+        add("add_certificate", "Додайте освіту або сертифікат", "Це підвищить документальну готовність профілю.", "medium", "profile", "open_onboarding_step", "/agent/onboarding?step=education")
+    if readiness["workAuthorizationStatus"] != "confirmed":
+        add("work_auth", "Уточніть право на роботу", "ATLAS не буде позначати готовність як підтверджену без цих даних.", "medium", "profile", "open_onboarding_step", "/agent/onboarding?step=personal_data")
+    if readiness["preferencesStatus"] != "complete":
+        add("preferences", "Уточніть кар'єрні побажання", "Країни, формат і зарплата потрібні для наступних рекомендацій.", "medium", "profile", "open_onboarding_step", "/agent/onboarding?step=preferences")
+    if readiness["matchingConsentStatus"] != "enabled":
+        add("matching_consent", "Увімкніть AI Matching", "Автоматичний підбір не запускатиметься без окремої згоди.", "low", "consent", "open_consent_settings", "/agent/onboarding?step=consents")
+    for item in (dna or {}).get("recommendations", []):
+        if len(actions) >= 5:
+            break
+        add(str(item.get("id") or new_id("ACTN")), str(item.get("title") or "Оновіть профіль"), str(item.get("description") or ""), str(item.get("priority") or "low"), "dna", str(item.get("actionType") or "open_onboarding_step"), str(item.get("actionRoute") or ""))
+    return actions[:5]
+
+
+def _dashboard_quick_actions(profile_status: dict[str, Any], readiness: dict[str, str], has_dna: bool) -> list[dict[str, str]]:
+    actions = [
+        {"id": "edit_profile", "title": "Редагувати профіль", "route": "/agent/onboarding?step=personal_data", "actionType": "profile_edit_started"},
+        {"id": "replace_cv", "title": "Завантажити або замінити CV", "route": "/agent/onboarding?step=cv", "actionType": "document_action_started"},
+        {"id": "add_document", "title": "Додати документ", "route": "/agent/onboarding?step=education", "actionType": "document_action_started"},
+        {"id": "career_preferences", "title": "Змінити career preferences", "route": "/agent/onboarding?step=preferences", "actionType": "profile_edit_started"},
+        {"id": "consents", "title": "Відкрити consent settings", "route": "/agent/onboarding?step=consents", "actionType": "consent_settings_open"},
+    ]
+    if has_dna:
+        actions.insert(3, {"id": "view_dna", "title": "Переглянути Professional DNA", "route": "/agent/onboarding?step=professional_dna", "actionType": "dna_viewed"})
+    return actions[:6]
+
+
+def _dashboard_activity(events: list[ActivityEvent], user_id: str) -> list[dict[str, Any]]:
+    labels = {
+        "onboarding_step_saved": "Профіль оновлено",
+        "cv_parse_confirmed": "CV підтверджено",
+        "consent_granted": "Consent змінено",
+        "consent_declined": "Consent змінено",
+        "consent_withdrawn": "Consent відкликано",
+        "professional_dna_generated": "Professional DNA оновлено",
+        "onboarding_completed": "Onboarding завершено",
+        "onboarding_completion_retry": "Повторне відкриття завершеного onboarding",
+    }
+    result = []
+    for event in sorted((item for item in events if item.entity_id == user_id), key=lambda item: item.created_at, reverse=True):
+        if event.action == "dashboard_opened":
+            continue
+        result.append({
+            "id": event.id,
+            "type": event.action,
+            "title": labels.get(event.action, event.action.replace("_", " ").title()),
+            "createdAt": event.created_at,
+            "source": event.new_value or event.entity_type,
+        })
+        if len(result) >= 8:
+            break
+    return result
+
+
+def _expired_documents(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    return [item for item in profile.get("certificates", []) if isinstance(item, dict) and item.get("status") == "expired"]
+
+
+def _expiring_documents(profile: dict[str, Any]) -> list[dict[str, Any]]:
+    return [item for item in profile.get("certificates", []) if isinstance(item, dict) and item.get("status") == "expiring"]
 
 
 def _consent_view(policy: dict[str, Any], status: dict[str, Any] | None) -> dict[str, Any]:
