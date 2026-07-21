@@ -356,3 +356,23 @@ class EmployerOnboardingStepPatch(BaseModel):
     step: str
     data: dict[str, Any] = Field(default_factory=dict)
     next_step: str | None = None
+
+
+class CompanyPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanyVerificationPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanyLocationPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanyInvitationPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CompanyMemberPatch(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)

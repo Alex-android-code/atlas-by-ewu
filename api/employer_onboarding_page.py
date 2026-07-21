@@ -46,7 +46,7 @@ EMPLOYER_ONBOARDING_HTML = r"""
 <script>
   let userId = localStorage.getItem("atlas_employer_user_id") || "";
   let headers = {"Content-Type":"application/json"};
-  const steps = ["welcome","company","contact","hiring_needs","documents","consents","completed"];
+  const steps = ["welcome","employer_agent","company_identity","company_verification","company_profile","locations","team","hiring_needs","hiring_process","integrations","consents","completion"];
   let session = null;
   let current = "welcome";
   let local = {};
@@ -70,25 +70,30 @@ EMPLOYER_ONBOARDING_HTML = r"""
     session = await api("/api/employer/onboarding");
     local = structuredClone(session.data || {});
     const requested = new URLSearchParams(location.search).get("step");
-    current = requested && steps.includes(requested) ? requested : (session.status === "completed" ? "completed" : session.current_step || "welcome");
+    current = requested && steps.includes(requested) ? requested : (session.status === "completed" ? "completion" : session.current_step || "welcome");
     render();
   }
   function render() {
     errorBox.textContent = "";
     document.getElementById("steps").innerHTML = steps.map((step) => `<div class="step ${step === current ? "active" : ""}">${escapeHtml(step.replace("_"," "))}</div>`).join("");
     backButton.disabled = steps.indexOf(current) <= 0;
-    nextButton.textContent = current === "completed" ? "Open dashboard" : current === "documents" ? "Save documents" : current === "consents" ? "Complete" : "Continue";
+    nextButton.textContent = current === "completion" ? "Open dashboard" : current === "company_verification" ? "Save verification" : current === "consents" ? "Complete" : "Continue";
     view.innerHTML = templates[current]();
     bind();
   }
   const templates = {
-    welcome: () => `<h1>Employer onboarding</h1><p>Create a verified company profile, define hiring needs and prepare documents before recruitment starts.</p>`,
-    company: () => `<h2>Company profile</h2><div class="grid">${input("company.company_name","Company name")}${input("company.country_code","Country code, e.g. PL")}${input("company.industry","Industry")}${input("company.registration_number","Registration / tax number")}</div>`,
-    contact: () => `<h2>Contact person</h2><div class="grid">${input("contact.contact_person","Contact person")}${input("contact.contact_email","Email","email")}${input("contact.contact_phone","Phone")}${input("contact.role","Role")}</div>`,
-    hiring_needs: () => `<h2>Hiring needs</h2><div class="grid">${input("hiring_needs.profession","Profession / role")}${input("hiring_needs.quantity","Quantity","number")}${input("hiring_needs.country_code","Work country")}${input("hiring_needs.location","Location")}${input("hiring_needs.salary_min","Salary min","number")}${input("hiring_needs.salary_max","Salary max","number")}</div>${textarea("hiring_needs.requirements","Requirements")}`,
-    documents: () => `<h2>Company documents</h2><p>Upload registration, NIP/tax number, licenses or offer terms. Uploaded means stored, not verified.</p><div class="upload" id="drop"><input type="file" id="file" accept=".pdf,.doc,.docx,.odt,.rtf" hidden><button class="secondary" data-action="choose" type="button">Attach file</button><p id="upload-status">${(local.documents?.files || []).map((f) => escapeHtml(f.original_name)).join(", ") || "No documents uploaded."}</p></div>`,
-    consents: () => `<h2>Business consents</h2><label><input type="checkbox" data-path="consents.terms" ${val("consents.terms") ? "checked" : ""}> Terms of Service</label><label><input type="checkbox" data-path="consents.privacy" ${val("consents.privacy") ? "checked" : ""}> Privacy Policy</label><label><input type="checkbox" data-path="consents.businessProcessing" ${val("consents.businessProcessing") ? "checked" : ""}> Business data processing</label><label><input type="checkbox" data-path="consents.matching" ${val("consents.matching") ? "checked" : ""}> AI matching for vacancies</label>`,
-    completed: () => `<h1>Company profile ready</h1><p>${escapeHtml(val("company.company_name") || "Company")} is ready for employer dashboard review.</p><div class="grid"><div class="card"><h3>Hiring</h3><p>${escapeHtml(val("hiring_needs.profession") || "")} · ${escapeHtml(val("hiring_needs.quantity") || 1)} worker(s)</p></div><div class="card"><h3>Documents</h3><p>${(local.documents?.files || []).length} uploaded document(s)</p></div></div><div class="actions"><a class="button" href="/employer/dashboard">Open dashboard</a><a class="button secondary" href="/employer/onboarding?step=company">Review company</a></div>`
+    welcome: () => `<h1>Employer onboarding</h1><p>Create or join a company workspace, verify business data, configure hiring and open a real employer dashboard.</p>`,
+    employer_agent: () => `<h2>Employer AI agent</h2><div class="grid">${input("employer_agent.name","Agent name")}${input("employer_agent.language","Language")}${input("employer_agent.tone","Tone")}${input("employer_agent.autonomy_level","Autonomy level 0-3","number")}</div>${textarea("employer_agent.tasks","Tasks, comma separated")}`,
+    company_identity: () => `<h2>Company identity</h2><div class="grid">${input("company_identity.legal_name","Legal name")}${input("company_identity.trading_name","Trading name")}${input("company_identity.country_code","Registration country")}${input("company_identity.registration_number","Registration number")}${input("company_identity.tax_number","VAT/NIP/tax number")}${input("company_identity.official_email","Official email","email")}${input("company_identity.phone","Phone")}${input("company_identity.website","Website")}</div>${textarea("company_identity.legal_address","Legal address")}`,
+    company_verification: () => `<h2>Company verification</h2><p>Upload registration, tax or representation documents. Uploaded files create a pending review, not an automatic verified status.</p><div class="upload" id="drop"><input type="file" id="file" accept=".pdf,.doc,.docx,.odt,.rtf" hidden><button class="secondary" data-action="choose" type="button">Attach file</button><p id="upload-status">${(local.company_verification?.files || []).map((f) => escapeHtml(f.original_name)).join(", ") || "No documents uploaded."}</p></div>`,
+    company_profile: () => `<h2>Company profile</h2><div class="grid">${input("company_profile.industry","Industry")}${input("company_profile.subindustry","Subindustry")}${input("company_profile.company_size","Company size")}${input("company_profile.employee_count","Employees","number")}${input("company_profile.founded_year","Founded year","number")}${input("company_profile.employer_type","Employer type")}</div>${textarea("company_profile.short_description","Short description")}${textarea("company_profile.benefits","Benefits, comma separated")}`,
+    locations: () => `<h2>Locations</h2><p>Add headquarters or main work location. Exact address stays private unless explicitly published.</p><div class="grid">${input("locations.locations.0.type","Type")}${input("locations.locations.0.country","Country")}${input("locations.locations.0.city","City")}${input("locations.locations.0.address","Private address")}</div>`,
+    team: () => `<h2>Recruiting team</h2><p>Optional. Invite trusted team members with backend-controlled roles.</p><div class="grid">${input("team.invitations.0.email","Invite email","email")}${input("team.invitations.0.role","Role")}</div>`,
+    hiring_needs: () => `<h2>Hiring needs</h2><div class="grid">${input("hiring_needs.profession","Profession / role")}${input("hiring_needs.quantity","Quantity","number")}${input("hiring_needs.urgency","Urgency")}${input("hiring_needs.targetStartDate","Start date")}${input("hiring_needs.salary_min","Salary min","number")}${input("hiring_needs.salary_max","Salary max","number")}${input("hiring_needs.currency","Currency")}${input("hiring_needs.grossNet","Gross/net")}</div>${textarea("hiring_needs.skills","Skills, comma separated")}`,
+    hiring_process: () => `<h2>Hiring process</h2><p>ATLAS keeps final states protected: hired, rejected and withdrawn cannot be removed.</p><div class="grid">${input("hiring_process.stages.0.label","First stage")}${input("hiring_process.stages.1.label","Second stage")}${input("hiring_process.stages.2.label","Third stage")}</div>`,
+    integrations: () => `<h2>Integrations</h2><p>Optional. Keep disabled until keys and contracts are ready.</p><label><input type="checkbox" data-path="integrations.enabled" ${val("integrations.enabled") ? "checked" : ""}> Enable integrations later</label>${textarea("integrations.systems","Systems, comma separated")}`,
+    consents: () => `<h2>Business consents</h2><label><input type="checkbox" data-path="consents.required.termsForBusiness" ${val("consents.required.termsForBusiness") ? "checked" : ""}> Terms for Business</label><label><input type="checkbox" data-path="consents.required.dataProcessing" ${val("consents.required.dataProcessing") ? "checked" : ""}> Privacy/Data Processing Terms</label><label><input type="checkbox" data-path="consents.required.representativeAuthority" ${val("consents.required.representativeAuthority") ? "checked" : ""}> Authority to represent company</label><label><input type="checkbox" data-path="consents.required.lawfulCandidateUse" ${val("consents.required.lawfulCandidateUse") ? "checked" : ""}> Lawful candidate data use</label><label><input type="checkbox" data-path="consents.required.nonDiscrimination" ${val("consents.required.nonDiscrimination") ? "checked" : ""}> Non-discriminatory hiring</label><label><input type="checkbox" data-path="consents.optional.aiMatching" ${val("consents.optional.aiMatching") ? "checked" : ""}> AI matching</label>`,
+    completion: () => `<h1>Company workspace ready</h1><p>${escapeHtml(val("company_identity.trading_name") || val("company_identity.legal_name") || "Company")} is ready for employer dashboard review.</p><div class="grid"><div class="card"><h3>Hiring</h3><p>${escapeHtml(val("hiring_needs.profession") || "")} · ${escapeHtml(val("hiring_needs.quantity") || 1)} worker(s)</p></div><div class="card"><h3>Verification</h3><p>${(local.company_verification?.files || []).length} uploaded document(s), pending review</p></div></div><div class="actions"><a class="button" href="/employer/dashboard">Open dashboard</a><a class="button secondary" href="/employer/onboarding?step=company_identity">Review company</a></div>`
   };
   function bind() {
     document.querySelectorAll("[data-path]").forEach((el) => {
@@ -107,13 +112,13 @@ EMPLOYER_ONBOARDING_HTML = r"""
     const res = await fetch("/api/files/upload", {method:"POST", headers: {"X-ATLAS-User-Id": userId}, body: form});
     const data = await res.json();
     if (!res.ok) return fail(data.detail || "Upload failed");
-    local.documents = local.documents || {files:[]};
-    local.documents.files = [...(local.documents.files || []), data.file];
-    await api("/api/employer/onboarding", {method:"PATCH", body:JSON.stringify({step:"documents", data:local.documents, next_step:"documents"})});
+    local.company_verification = local.company_verification || {files:[]};
+    local.company_verification.files = [...(local.company_verification.files || []), data.file];
+    await api("/api/employer/onboarding", {method:"PATCH", body:JSON.stringify({step:"company_verification", data:local.company_verification, next_step:"company_verification"})});
     render();
   }
   async function next() {
-    if (current === "completed") { location.href = "/employer/dashboard"; return; }
+    if (current === "completion") { location.href = "/employer/dashboard"; return; }
     const data = collect(current);
     if (!validate(current, data)) return;
     if (current === "consents") {
@@ -130,12 +135,21 @@ EMPLOYER_ONBOARDING_HTML = r"""
     current = session.current_step;
     render();
   }
-  function collect(step) { return step === "welcome" ? {} : (local[step] || {}); }
+  function collect(step) {
+    if (step === "welcome") return {};
+    const data = structuredClone(local[step] || {});
+    if (step === "locations" && data.locations && !Array.isArray(data.locations)) data.locations = Object.values(data.locations);
+    if (step === "team" && data.invitations && !Array.isArray(data.invitations)) data.invitations = Object.values(data.invitations).filter((item) => item.email);
+    if (step === "hiring_process" && data.stages && !Array.isArray(data.stages)) {
+      const custom = Object.values(data.stages).filter((item) => item.label);
+      data.stages = custom.length ? [...custom, {key:"hired", label:"Hired"}, {key:"rejected", label:"Rejected"}, {key:"withdrawn", label:"Withdrawn"}] : [];
+    }
+    return data;
+  }
   function validate(step, data) {
-    if (step === "company" && !data.company_name) return fail("Company name is required.");
-    if (step === "contact" && !data.contact_email) return fail("Contact email is required.");
+    if (step === "company_identity" && !data.legal_name) return fail("Legal company name is required.");
     if (step === "hiring_needs" && !data.profession) return fail("Profession is required.");
-    if (step === "consents" && (!data.terms || !data.privacy || !data.businessProcessing)) return fail("Required consents are missing.");
+    if (step === "consents" && (!data.required?.termsForBusiness || !data.required?.dataProcessing || !data.required?.representativeAuthority || !data.required?.lawfulCandidateUse || !data.required?.nonDiscrimination)) return fail("Required business consents are missing.");
     return true;
   }
   function input(path,label,type="text"){ return `<label>${label}<input data-path="${path}" type="${type}" value="${escapeHtml(val(path))}"></label>`; }

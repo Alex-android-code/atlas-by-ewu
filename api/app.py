@@ -74,6 +74,11 @@ from api.schemas import (
     EmployerCreate,
     EmployerCompetencyRequirementCreate,
     EmployerOnboardingStepPatch,
+    CompanyPayload,
+    CompanyVerificationPayload,
+    CompanyLocationPayload,
+    CompanyInvitationPayload,
+    CompanyMemberPatch,
     LoginRequest,
     MatchRequest,
     OnboardingStepPatch,
@@ -294,7 +299,146 @@ def complete_employer_onboarding(request: Request) -> dict:
 
 @app.get("/api/employer/dashboard")
 def get_employer_dashboard(request: Request) -> dict:
-    return get_employer_onboarding_workflow_service().dashboard(_onboarding_owner_id(request))
+    try:
+        return get_employer_onboarding_workflow_service().dashboard(_onboarding_owner_id(request))
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.get("/api/companies/{company_id}")
+def get_company(company_id: str, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().get_company(_onboarding_owner_id(request), company_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.patch("/api/companies/{company_id}")
+def update_company(company_id: str, payload: CompanyPayload, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().update_company(_onboarding_owner_id(request), company_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/companies/{company_id}/verification")
+def submit_company_verification(company_id: str, payload: CompanyVerificationPayload, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().submit_verification(_onboarding_owner_id(request), company_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/companies/{company_id}/verification")
+def list_company_verification(company_id: str, request: Request) -> list[dict]:
+    try:
+        return get_employer_onboarding_workflow_service().list_verification(_onboarding_owner_id(request), company_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.get("/api/companies/{company_id}/locations")
+def list_company_locations(company_id: str, request: Request) -> list[dict]:
+    try:
+        return get_employer_onboarding_workflow_service().list_locations(_onboarding_owner_id(request), company_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.post("/api/companies/{company_id}/locations")
+def create_company_location(company_id: str, payload: CompanyLocationPayload, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().create_location(_onboarding_owner_id(request), company_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/companies/{company_id}/locations/{location_id}")
+def update_company_location(company_id: str, location_id: str, payload: CompanyLocationPayload, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().update_location(_onboarding_owner_id(request), company_id, location_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.delete("/api/companies/{company_id}/locations/{location_id}")
+def delete_company_location(company_id: str, location_id: str, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().delete_location(_onboarding_owner_id(request), company_id, location_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.get("/api/companies/{company_id}/members")
+def list_company_members(company_id: str, request: Request) -> list[dict]:
+    try:
+        return get_employer_onboarding_workflow_service().list_members(_onboarding_owner_id(request), company_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.post("/api/companies/{company_id}/invitations")
+def invite_company_member(company_id: str, payload: CompanyInvitationPayload, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().invite_member(_onboarding_owner_id(request), company_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/company-invitations/{token}")
+def get_company_invitation(token: str) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().get_invitation_by_token(token)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/company-invitations/{token}/accept")
+def accept_company_invitation(token: str, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().accept_invitation(_onboarding_owner_id(request), token)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/companies/{company_id}/invitations/{invitation_id}/revoke")
+def revoke_company_invitation(company_id: str, invitation_id: str, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().revoke_invitation(_onboarding_owner_id(request), company_id, invitation_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.patch("/api/companies/{company_id}/members/{member_id}")
+def update_company_member(company_id: str, member_id: str, payload: CompanyMemberPatch, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().update_member(_onboarding_owner_id(request), company_id, member_id, payload.data)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.delete("/api/companies/{company_id}/members/{member_id}")
+def delete_company_member(company_id: str, member_id: str, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().remove_member(_onboarding_owner_id(request), company_id, member_id)
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.get("/{language_code}/employer/onboarding", response_class=HTMLResponse)
