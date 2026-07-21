@@ -12,7 +12,8 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
-from api.agent import AGENT_DASHBOARD_HTML, AGENT_ONBOARDING_HTML
+from api.agent import AGENT_DASHBOARD_HTML
+from api.onboarding_page import AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
 from api.control_center import CONTROL_CENTER_HTML
 from api.dashboard import DASHBOARD_HTML
@@ -26,6 +27,7 @@ from api.dependencies import (
     get_development_recommendation_service,
     get_dynamic_interview_service,
     get_entitlement_service,
+    get_onboarding_workflow_service,
     get_operations_workflow,
     get_product_architecture_service,
     get_rodo_service,
@@ -57,6 +59,7 @@ from api.schemas import (
     CorporateEmployeeCreate,
     CorporatePositionCreate,
     CustomerSubscriptionSet,
+    CvParseAccept,
     DevelopmentPlanCreate,
     DevelopmentRecommendationCreate,
     DynamicInterviewAnswer,
@@ -66,6 +69,7 @@ from api.schemas import (
     EmployerCompetencyRequirementCreate,
     LoginRequest,
     MatchRequest,
+    OnboardingStepPatch,
     SkillGapAnalysisRequest,
     StatusUpdate,
     TargetCompetencyRequirement,
@@ -717,6 +721,84 @@ def complete_agent_onboarding(payload: AgentOnboardingComplete) -> dict:
     crm_sync = _sync_agent_profile_to_crm(payload.user_id, professional_dna)
     result["crm_sync"] = crm_sync
     return result
+
+
+@app.get("/api/onboarding")
+def get_onboarding_session(request: Request) -> dict:
+    return get_onboarding_workflow_service().get_or_start(_onboarding_owner_id(request))
+
+
+@app.patch("/api/onboarding")
+def patch_onboarding_session(payload: OnboardingStepPatch, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().patch_step(
+            _onboarding_owner_id(request),
+            step=payload.step,
+            data=payload.data,
+            next_step=payload.next_step,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/onboarding/complete")
+def complete_onboarding_workflow(request: Request) -> dict:
+    user_id = _onboarding_owner_id(request)
+    result = get_onboarding_workflow_service().complete(user_id)
+    professional_dna = result.get("dashboard", {}).get("professional_dna", {})
+    result["crm_sync"] = _sync_agent_profile_to_crm(user_id, professional_dna)
+    return result
+
+
+@app.post("/api/files/profile-photo")
+def upload_profile_photo_file(request: Request, file: UploadFile = File(...)) -> dict:
+    return _upload_onboarding_file(request, file, kind="profile_photo")
+
+
+@app.post("/api/files/cv")
+def upload_cv_file(request: Request, file: UploadFile = File(...)) -> dict:
+    return _upload_onboarding_file(request, file, kind="cv")
+
+
+@app.delete("/api/files/profile-photo/{file_id}")
+def delete_profile_photo_file(file_id: str, request: Request) -> dict:
+    return _delete_onboarding_file(request, file_id, kind="profile_photo")
+
+
+@app.delete("/api/files/cv/{file_id}")
+def delete_cv_file(file_id: str, request: Request) -> dict:
+    return _delete_onboarding_file(request, file_id, kind="cv")
+
+
+@app.post("/api/cv/{file_id}/parse")
+def parse_cv_file(file_id: str, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().parse_cv(_onboarding_owner_id(request), file_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/cv/parse-jobs/{job_id}")
+def get_cv_parse_job(job_id: str, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().get_parse_job(_onboarding_owner_id(request), job_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/cv/parse-jobs/accept")
+def accept_cv_parse(payload: CvParseAccept, request: Request) -> dict:
+    return get_onboarding_workflow_service().accept_cv_parse(_onboarding_owner_id(request), payload.accepted)
+
+
+@app.post("/api/professional-dna/generate")
+def generate_professional_dna(request: Request) -> dict:
+    return get_onboarding_workflow_service().generate_dna(_onboarding_owner_id(request))
+
+
+@app.get("/api/professional-dna")
+def get_professional_dna(request: Request) -> dict:
+    return get_onboarding_workflow_service().get_dna(_onboarding_owner_id(request))
 
 
 @app.post("/api/onboarding/profile-photo")

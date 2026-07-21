@@ -302,3 +302,13 @@ class AgentOnboardingAnswer(BaseModel):
 
 class AgentOnboardingComplete(BaseModel):
     user_id: str
+
+
+class OnboardingStepPatch(BaseModel):
+    step: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    next_step: str | None = None
+
+
+class CvParseAccept(BaseModel):
+    accepted: dict[str, Any] = Field(default_factory=dict)

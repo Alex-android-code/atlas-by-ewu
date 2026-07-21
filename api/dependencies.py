@@ -64,6 +64,7 @@ from services.development_recommendations import (
 from services.dynamic_interview import DynamicInterviewService
 from services.entitlements import EntitlementRepositories, EntitlementService
 from services.rodo_service import RodoService
+from services.onboarding_workflow import OnboardingWorkflowService
 from services.skill_gap_analysis import SkillGapService
 from services.product_architecture import ProductArchitectureService
 from workflows.operations_workflow import OperationsWorkflow
@@ -110,6 +111,17 @@ def get_agent_profile_service() -> AgentProfileService:
         goals=CareerGoalRepository(database),
         preferences=UserPreferenceRepository(database),
         subscriptions=SubscriptionRepository(database),
+    )
+
+
+def get_onboarding_workflow_service() -> OnboardingWorkflowService:
+    database = get_database()
+    return OnboardingWorkflowService(
+        database=database,
+        agent_profiles=get_agent_profile_service(),
+        consents=ConsentRepository(database),
+        documents=DocumentRepository(database),
+        activity=ActivityRepository(database),
     )
 
 
