@@ -318,3 +318,5 @@ class OnboardingStepPatch(BaseModel):
 
 class CvParseAccept(BaseModel):
     accepted: dict[str, Any] = Field(default_factory=dict)
+    action: str = "accept_selected"
+    job_id: str | None = None

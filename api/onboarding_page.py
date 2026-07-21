@@ -198,6 +198,7 @@ AGENT_ONBOARDING_HTML = r"""
     let current = "welcome";
     let local = {};
     let selectedParsed = {};
+    let pendingCvDecision = false;
     const uploadRuntime = {};
     const uploadConfigs = {
       profile_photo: {
@@ -271,6 +272,7 @@ AGENT_ONBOARDING_HTML = r"""
       badge.textContent = `${stepIndex + 1} / ${steps.length}`;
       bar.style.width = `${session?.progress?.percent || 0}%`;
       backButton.disabled = stepIndex === 0;
+      nextButton.disabled = pendingCvDecision;
       nextButton.textContent = current === "completed" ? "Відкрити dashboard" : current === "professional_dna" ? "Завершити" : "Продовжити";
       view.innerHTML = templates[current]();
       bindStep();
@@ -540,7 +542,17 @@ AGENT_ONBOARDING_HTML = r"""
     async function acceptCv() {
       selectedParsed = collectSelectedCvFields();
       if (!Object.keys(selectedParsed).length) return fail("Виберіть хоча б одне поле з CV.");
-      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed}), headers});
+      const jobId = session?.parsed_cv?.job_id || null;
+      setPath("cv.accepted_parsed_data", selectedParsed);
+      setPath("cv.parse_rejected", false);
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_selected", accepted_fields: Object.keys(selectedParsed)}};
+      pendingCvDecision = true;
+      nextButton.disabled = true;
+      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed, action: "accept_selected", job_id: jobId}), headers}).finally(() => {
+        pendingCvDecision = false;
+        nextButton.disabled = false;
+      });
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_selected", accepted_fields: Object.keys(selectedParsed)}};
       setPath("cv.accepted_parsed_data", selectedParsed);
       setPath("cv.parse_rejected", false);
       fail("Дані з CV прийнято. Можете продовжити.");
@@ -549,13 +561,35 @@ AGENT_ONBOARDING_HTML = r"""
     async function acceptAllCv() {
       selectedParsed = collectAllCvFields();
       if (!Object.keys(selectedParsed).length) return fail("Спочатку проаналізуйте CV.");
-      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed}), headers});
+      const jobId = session?.parsed_cv?.job_id || null;
+      setPath("cv.accepted_parsed_data", selectedParsed);
+      setPath("cv.parse_rejected", false);
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_all", accepted_fields: Object.keys(selectedParsed)}};
+      pendingCvDecision = true;
+      nextButton.disabled = true;
+      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed, action: "accept_all", job_id: jobId}), headers}).finally(() => {
+        pendingCvDecision = false;
+        nextButton.disabled = false;
+      });
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_all", accepted_fields: Object.keys(selectedParsed)}};
       setPath("cv.accepted_parsed_data", selectedParsed);
       setPath("cv.parse_rejected", false);
       fail("Усі доступні дані з CV прийнято. Можете продовжити.");
     }
 
-    function rejectCv() {
+    async function rejectCv() {
+      const jobId = session?.parsed_cv?.job_id || null;
+      setPath("cv.accepted_parsed_data", {});
+      setPath("cv.parse_rejected", true);
+      selectedParsed = {};
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "rejected", decision: {action: "reject", accepted_fields: []}};
+      pendingCvDecision = true;
+      nextButton.disabled = true;
+      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: {}, action: "reject", job_id: jobId}), headers}).finally(() => {
+        pendingCvDecision = false;
+        nextButton.disabled = false;
+      });
+      session.parsed_cv = {...(session.parsed_cv || {}), status: "rejected", decision: {action: "reject", accepted_fields: []}};
       setPath("cv.accepted_parsed_data", {});
       setPath("cv.parse_rejected", true);
       selectedParsed = {};
@@ -666,7 +700,10 @@ AGENT_ONBOARDING_HTML = r"""
     function cvReviewTemplate() {
       const parsedData = session?.parsed_cv?.result;
       if (!parsedData) return `<p class="small">Після аналізу тут з'являться поля з confidence і source.</p>`;
-      return `<div class="grid">${Object.entries(parsedData).filter(([key]) => !["source","warnings","confidence"].includes(key)).map(([key, value]) => {
+      const metaKeys = ["source","warnings","confidence","notFoundFields","parser"];
+      const status = session?.parsed_cv?.status || "completed";
+      const statusBlock = `<div class="card"><div class="chips"><span class="chip">CV job: ${escapeHtml(status)}</span><span class="chip">${escapeHtml(parsedData.parser?.version || "cv_rule_based_v1")}</span></div><p class="small">${escapeHtml((parsedData.warnings || []).join(" "))}</p>${(parsedData.notFoundFields || []).length ? `<p class="small">Not found: ${escapeHtml(parsedData.notFoundFields.join(", "))}</p>` : ""}</div>`;
+      return `${statusBlock}<div class="grid">${Object.entries(parsedData).filter(([key]) => !metaKeys.includes(key)).map(([key, value]) => {
         const shown = typeof value === "object" && value !== null && "value" in value ? value.value : value;
         const confidence = typeof value === "object" && value !== null ? value.confidence || parsedData.confidence : parsedData.confidence;
         const textValue = Array.isArray(shown) ? shown.join(", ") : (typeof shown === "object" ? JSON.stringify(shown ?? "") : String(shown ?? ""));
@@ -676,7 +713,7 @@ AGENT_ONBOARDING_HTML = r"""
           <textarea data-cv-field="${escapeHtml(key)}">${escapeHtml(textValue)}</textarea>
           <div class="chips"><span class="chip">${escapeHtml(confidence || "low")}</span><span class="chip">${escapeHtml(value?.source || parsedData.source?.fileName || "cv")}</span></div>
         </div>`;
-      }).join("")}</div><p class="small">${escapeHtml((parsedData.warnings || []).join(" "))}</p>`;
+      }).join("")}</div>`;
     }
 
     function collectSelectedCvFields() {

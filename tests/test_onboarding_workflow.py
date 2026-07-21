@@ -64,6 +64,46 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         self.assertEqual(job["result"]["fullName"]["value"], "")
         self.assertEqual(job["result"]["confidence"], "low")
         self.assertIn("only facts", job["result"]["warnings"][0])
+        self.assertIn("parser", job["result"])
+        self.assertIn("fullName", job["result"]["notFoundFields"])
+
+    def test_accepting_cv_syncs_only_confirmed_fields_to_profile(self) -> None:
+        file_data = {"id": "ONB-CV", "original_name": "cv.pdf", "stored_name": "ONB-CV.pdf"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+        job = self.service.parse_cv("user-1", "ONB-CV")
+
+        saved = self.service.accept_cv_parse(
+            "user-1",
+            {
+                "email": {"value": "worker@example.com", "source": "user_confirmed_cv_review", "confidence": "medium"},
+                "skills": {"value": ["Python", "Logistics"], "source": "user_confirmed_cv_review", "confidence": "medium"},
+                "summary": {"value": "", "source": "user_confirmed_cv_review", "confidence": "low"},
+            },
+            action="accept_selected",
+            job_id=job["id"],
+        )
+
+        profile = self.service.agent_profiles.get_or_create_profile("user-1")
+        reloaded_job = self.service.get_parse_job("user-1", job["id"])
+        self.assertEqual(saved["data"]["personal_data"]["email"], "worker@example.com")
+        self.assertEqual(profile.contact_information["email"], "worker@example.com")
+        self.assertEqual(profile.skills, ["Python", "Logistics"])
+        self.assertNotIn("summary", saved["data"]["cv"]["accepted_parsed_data"])
+        self.assertEqual(reloaded_job["status"], "accepted")
+
+    def test_rejecting_cv_parse_persists_decision_without_profile_sync(self) -> None:
+        file_data = {"id": "ONB-CV", "original_name": "cv.pdf", "stored_name": "ONB-CV.pdf"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+        job = self.service.parse_cv("user-1", "ONB-CV")
+
+        saved = self.service.accept_cv_parse("user-1", {}, action="reject", job_id=job["id"])
+
+        profile = self.service.agent_profiles.get_or_create_profile("user-1")
+        reloaded_job = self.service.get_parse_job("user-1", job["id"])
+        self.assertTrue(saved["data"]["cv"]["parse_rejected"])
+        self.assertEqual(saved["data"]["cv"]["accepted_parsed_data"], {})
+        self.assertEqual(profile.contact_information.get("email"), None)
+        self.assertEqual(reloaded_job["status"], "rejected")
 
     def test_required_consents_are_enforced(self) -> None:
         with self.assertRaises(ValueError):

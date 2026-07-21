@@ -78,7 +78,11 @@ class OnboardingApiTests(unittest.TestCase):
         self.client.post(
             "/api/cv/parse-jobs/accept",
             headers=headers,
-            json={"accepted": {"email": {"value": "worker@example.com", "source": "user_confirmed_cv_review"}}},
+            json={
+                "action": "accept_selected",
+                "job_id": parsed.json()["id"],
+                "accepted": {"email": {"value": "worker@example.com", "source": "user_confirmed_cv_review"}},
+            },
         )
         self.client.patch(
             "/api/onboarding",
@@ -103,7 +107,32 @@ class OnboardingApiTests(unittest.TestCase):
         dashboard = self.client.get("/api/agent/dashboard", headers=headers)
         self.assertEqual(dashboard.status_code, 200)
         self.assertTrue(dashboard.json()["documents"])
+        self.assertEqual(dashboard.json()["profile"]["contact_information"]["email"], "worker@example.com")
         self.assertEqual(dashboard.json()["professional_dna"]["version"], "professional_dna_v1_rule_based")
+
+    def test_cv_parse_reject_endpoint_records_decision(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+        cv = self.client.post(
+            "/api/files/upload",
+            headers=headers,
+            data={"kind": "cv"},
+            files={"file": ("cv.pdf", b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF", "application/pdf")},
+        )
+        cv_file = cv.json()["file"]
+        self.client.patch("/api/onboarding", headers=headers, json={"step": "cv", "data": {"file": cv_file}})
+        parsed = self.client.post(f"/api/cv/{cv_file['id']}/parse", headers=headers).json()
+
+        rejected = self.client.post(
+            "/api/cv/parse-jobs/accept",
+            headers=headers,
+            json={"action": "reject", "job_id": parsed["id"], "accepted": {}},
+        )
+
+        self.assertEqual(rejected.status_code, 200)
+        self.assertTrue(rejected.json()["data"]["cv"]["parse_rejected"])
+        job = self.client.get(f"/api/cv/parse-jobs/{parsed['id']}", headers=headers)
+        self.assertEqual(job.json()["status"], "rejected")
 
     def test_universal_file_api_delete_and_signed_download(self) -> None:
         registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})

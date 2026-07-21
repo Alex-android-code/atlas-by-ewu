@@ -833,7 +833,15 @@ def get_cv_parse_job(job_id: str, request: Request) -> dict:
 
 @app.post("/api/cv/parse-jobs/accept")
 def accept_cv_parse(payload: CvParseAccept, request: Request) -> dict:
-    return get_onboarding_workflow_service().accept_cv_parse(_onboarding_owner_id(request), payload.accepted)
+    try:
+        return get_onboarding_workflow_service().accept_cv_parse(
+            _onboarding_owner_id(request),
+            payload.accepted,
+            action=payload.action,
+            job_id=payload.job_id,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.post("/api/professional-dna/generate")

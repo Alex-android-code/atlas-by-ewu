@@ -89,9 +89,15 @@ class OnboardingWorkflowService:
         if step == "cv" and (data or {}).get("file"):
             self.agent_profiles.save_onboarding_answer(user_id, "uploaded_cv", data["file"])
             self._ensure_document_record(user_id, data["file"], "cv")
-        if step == "cv_review" and (data or {}).get("accepted_parsed_data"):
-            session.setdefault("data", {}).setdefault("cv", {})["accepted_parsed_data"] = data["accepted_parsed_data"]
-            self.accept_cv_parse(user_id, data["accepted_parsed_data"])
+        if step == "cv_review":
+            if (data or {}).get("accepted_parsed_data"):
+                session.setdefault("data", {}).setdefault("cv", {})["accepted_parsed_data"] = data["accepted_parsed_data"]
+                session.setdefault("data", {}).setdefault("cv", {})["parse_rejected"] = False
+                self.accept_cv_parse(user_id, data["accepted_parsed_data"], action="accept_selected", job_id=(data or {}).get("job_id"))
+            elif (data or {}).get("rejected"):
+                session.setdefault("data", {}).setdefault("cv", {})["accepted_parsed_data"] = {}
+                session.setdefault("data", {}).setdefault("cv", {})["parse_rejected"] = True
+                self.accept_cv_parse(user_id, {}, action="reject", job_id=(data or {}).get("job_id"))
         self._sync_step_to_profile(user_id, step, data or {})
         session["current_step"] = next_step if next_step in ONBOARDING_STEPS else self._next_step(step)
         session["updated_at"] = utc_now_iso()
@@ -106,21 +112,41 @@ class OnboardingWorkflowService:
         file_data = cv_data.get("file") or {}
         if file_id != file_data.get("id"):
             raise ValueError("CV file is not attached to this onboarding session")
-        parsed = _deterministic_cv_parse(file_data, session.get("data", {}), _extract_cv_text(file_path, file_data) if file_path else "")
+        now = utc_now_iso()
         job = {
             "id": new_id("CVP"),
             "user_id": user_id,
             "file_id": file_id,
-            "status": "completed",
-            "result": parsed,
-            "created_at": utc_now_iso(),
-            "updated_at": utc_now_iso(),
+            "status": "processing",
+            "progress": 35,
+            "result": None,
+            "error": None,
+            "warnings": [],
+            "created_at": now,
+            "started_at": now,
+            "completed_at": None,
+            "updated_at": now,
         }
         self.database.insert(CV_JOB_COLLECTION, job["id"], job)
-        session["parsed_cv"] = {"job_id": job["id"], "status": "completed", "result": parsed}
+        cv_text = _extract_cv_text(file_path, file_data) if file_path else ""
+        parsed = _deterministic_cv_parse(file_data, session.get("data", {}), cv_text)
+        completed_at = utc_now_iso()
+        job.update(
+            {
+                "status": "completed",
+                "progress": 100,
+                "result": parsed,
+                "warnings": parsed.get("warnings", []),
+                "completed_at": completed_at,
+                "updated_at": completed_at,
+            }
+        )
+        self.database.update(CV_JOB_COLLECTION, job["id"], job)
+        session["parsed_cv"] = {"job_id": job["id"], "status": "completed", "progress": 100, "result": parsed}
         session.setdefault("audit_log", []).append(_audit("cv_parse_completed", "cv"))
         session["updated_at"] = utc_now_iso()
         self.database.update(SESSION_COLLECTION, user_id, session)
+        self._record_activity(user_id, "cv_parse_completed", "cv")
         return job
 
     def get_parse_job(self, user_id: str, job_id: str) -> dict[str, Any]:
@@ -129,13 +155,47 @@ class OnboardingWorkflowService:
             raise ValueError("CV parse job not found")
         return job
 
-    def accept_cv_parse(self, user_id: str, accepted: dict[str, Any]) -> dict[str, Any]:
+    def accept_cv_parse(
+        self,
+        user_id: str,
+        accepted: dict[str, Any],
+        *,
+        action: str = "accept_selected",
+        job_id: str | None = None,
+    ) -> dict[str, Any]:
+        if action not in {"accept_all", "accept_selected", "reject"}:
+            raise ValueError(f"Unsupported CV parse action: {action}")
         session = self.get_or_start(user_id)
-        session.setdefault("data", {}).setdefault("cv", {})["accepted_parsed_data"] = accepted
-        session.setdefault("audit_log", []).append(_audit("cv_parse_accepted", "cv"))
+        cv_state = session.setdefault("data", {}).setdefault("cv", {})
+        if action == "reject":
+            cv_state["accepted_parsed_data"] = {}
+            cv_state["parse_rejected"] = True
+            audit_action = "cv_parse_rejected"
+            job_status = "rejected"
+        else:
+            sanitized = _sanitize_confirmed_cv_fields(accepted)
+            cv_state["accepted_parsed_data"] = sanitized
+            cv_state["parse_rejected"] = False
+            self._apply_accepted_cv_to_session(session, sanitized)
+            self._sync_accepted_cv_to_profile(user_id, sanitized)
+            accepted = sanitized
+            audit_action = "cv_parse_accepted"
+            job_status = "accepted"
+        resolved_job_id = job_id or session.get("parsed_cv", {}).get("job_id")
+        if resolved_job_id:
+            job = self.database.get(CV_JOB_COLLECTION, resolved_job_id)
+            if job and job.get("user_id") == user_id:
+                job["status"] = job_status
+                job["decision"] = {"action": action, "accepted_fields": sorted(accepted.keys())}
+                job["updated_at"] = utc_now_iso()
+                self.database.update(CV_JOB_COLLECTION, resolved_job_id, job)
+                if session.get("parsed_cv", {}).get("job_id") == resolved_job_id:
+                    session["parsed_cv"]["status"] = job_status
+                    session["parsed_cv"]["decision"] = job["decision"]
+        session.setdefault("audit_log", []).append(_audit(audit_action, "cv"))
         session["updated_at"] = utc_now_iso()
         self.database.update(SESSION_COLLECTION, user_id, session)
-        self._sync_step_to_profile(user_id, "cv", {"accepted_parsed_data": accepted})
+        self._record_activity(user_id, audit_action, "cv")
         return self._with_progress(session)
 
     def generate_dna(self, user_id: str) -> dict[str, Any]:
@@ -254,6 +314,68 @@ class OnboardingWorkflowService:
             if data.get("salary"):
                 self.agent_profiles.save_onboarding_answer(user_id, "salary_expectations", data.get("salary"))
 
+    def _apply_accepted_cv_to_session(self, session: dict[str, Any], accepted: dict[str, Any]) -> None:
+        data = session.setdefault("data", {})
+        personal = data.setdefault("personal_data", {})
+        for source, target in {"fullName": "fullName", "email": "email", "phone": "phone", "location": "location"}.items():
+            value = _confirmed_value(accepted.get(source))
+            if value and not personal.get(target):
+                personal[target] = value
+        profession = data.setdefault("profession", {})
+        headline = _confirmed_value(accepted.get("headline"))
+        if headline and not profession.get("headline"):
+            profession["headline"] = headline
+        professions = _confirmed_list(accepted.get("professions"))
+        if professions and not profession.get("profession"):
+            profession["profession"] = professions[0]
+        skills = _confirmed_list(accepted.get("skills"))
+        if skills and not profession.get("skills"):
+            profession["skills"] = skills
+        experience = _confirmed_records(accepted.get("workExperience"))
+        if experience and not data.setdefault("experience", {}).get("records"):
+            data["experience"]["records"] = experience
+        education = _confirmed_records(accepted.get("education"))
+        if education and not data.setdefault("education", {}).get("records"):
+            data["education"]["records"] = education
+        certificates = _confirmed_records(accepted.get("certificates"))
+        if certificates and not data.setdefault("education", {}).get("certificates"):
+            data["education"]["certificates"] = certificates
+        languages = _confirmed_records(accepted.get("languages"))
+        if languages and not data.setdefault("languages", {}).get("records"):
+            data["languages"]["records"] = languages
+
+    def _sync_accepted_cv_to_profile(self, user_id: str, accepted: dict[str, Any]) -> None:
+        for cv_key, profile_key in {
+            "fullName": "full_name",
+            "email": "email",
+            "phone": "phone",
+            "location": "current_location",
+        }.items():
+            value = _confirmed_value(accepted.get(cv_key))
+            if value:
+                self.agent_profiles.save_onboarding_answer(user_id, profile_key, value)
+        headline = _confirmed_value(accepted.get("headline"))
+        professions = _confirmed_list(accepted.get("professions"))
+        if headline or professions:
+            self.agent_profiles.save_onboarding_answer(user_id, "current_profession", headline or professions[0])
+        skills = _confirmed_list(accepted.get("skills"))
+        if skills:
+            self.agent_profiles.save_onboarding_answer(user_id, "skills", skills)
+        languages = _confirmed_records(accepted.get("languages"))
+        if languages:
+            self.agent_profiles.save_onboarding_answer(user_id, "languages", [item.get("name") or item.get("title") or item for item in languages])
+        certificates = _confirmed_records(accepted.get("certificates"))
+        if certificates:
+            self.agent_profiles.save_onboarding_answer(user_id, "certificates", [item.get("title") or item.get("name") or item for item in certificates])
+        experience = _confirmed_records(accepted.get("workExperience"))
+        if experience:
+            profile = self.agent_profiles.get_or_create_profile(user_id)
+            profile.work_experience = experience
+            profile.metadata.setdefault("onboarding", {})["work_experience"] = {"value": experience, "updated_at": utc_now_iso(), "language": "cv"}
+            profile.profile_completeness = self.agent_profiles.calculate_completeness(profile)
+            profile.updated_at = utc_now_iso()
+            self.agent_profiles.profiles.update(profile)
+
     def _store_consents(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
         result: dict[str, Any] = {}
         version = str(data.get("version") or "atlas-rodo-v1")
@@ -338,9 +460,12 @@ class OnboardingWorkflowService:
 def _deterministic_cv_parse(file_data: dict[str, Any], onboarding_data: dict[str, Any], cv_text: str = "") -> dict[str, Any]:
     personal = onboarding_data.get("personal_data", {})
     profession = onboarding_data.get("profession", {})
+    experience = onboarding_data.get("experience", {})
+    education = onboarding_data.get("education", {})
+    languages = onboarding_data.get("languages", {})
     filename = file_data.get("original_name", "")
     extracted = _extract_basic_cv_fields(cv_text)
-    return {
+    result = {
         "fullName": _value(personal.get("fullName") or extracted.get("fullName"), "personal_data.fullName" if personal.get("fullName") else "cv_text"),
         "email": _value(personal.get("email") or extracted.get("email"), "personal_data.email" if personal.get("email") else "cv_text"),
         "phone": _value(personal.get("phone") or extracted.get("phone"), "personal_data.phone" if personal.get("phone") else "cv_text"),
@@ -349,14 +474,22 @@ def _deterministic_cv_parse(file_data: dict[str, Any], onboarding_data: dict[str
         "summary": _value("", "not_found"),
         "professions": _list_value([profession.get("profession")] if profession.get("profession") else [], "profession.profession"),
         "skills": _list_value(profession.get("skills") or extracted.get("skills") or [], "profession.skills" if profession.get("skills") else "cv_text"),
-        "workExperience": onboarding_data.get("experience", {}).get("records", []),
-        "education": onboarding_data.get("education", {}).get("records", []),
-        "certificates": onboarding_data.get("education", {}).get("certificates", []),
-        "languages": onboarding_data.get("languages", {}).get("records", []),
+        "workExperience": _record_value(experience.get("records", []), "experience.records"),
+        "education": _record_value(education.get("records", []), "education.records"),
+        "certificates": _record_value(education.get("certificates", []), "education.certificates"),
+        "languages": _record_value(languages.get("records", []), "languages.records"),
         "source": {"fileId": file_data.get("id"), "fileName": filename, "textExtracted": bool(cv_text.strip())},
         "confidence": "medium" if (personal or profession or extracted) else "low",
         "warnings": ["ATLAS extracted only facts found in uploaded CV text or already confirmed onboarding data."],
+        "notFoundFields": [],
+        "parser": {"version": "cv_rule_based_v1", "mode": "deterministic", "aiGeneratedMissingData": False},
     }
+    result["notFoundFields"] = [
+        key
+        for key, value in result.items()
+        if isinstance(value, dict) and "value" in value and not value.get("value")
+    ]
+    return result
 
 
 def _extract_cv_text(path: Path | None, file_data: dict[str, Any]) -> str:
@@ -505,11 +638,97 @@ def _presence_score(value: Any, max_score: int) -> int:
 
 
 def _value(value: Any, source: str) -> dict[str, Any]:
-    return {"value": value or "", "source": source, "confidence": "medium" if value else "low"}
+    return {
+        "value": value or "",
+        "source": source if value else "not_found",
+        "confidence": "medium" if value else "low",
+        "editable": True,
+        "selected": bool(value),
+    }
 
 
 def _list_value(value: list[Any], source: str) -> dict[str, Any]:
-    return {"value": [item for item in value if item], "source": source, "confidence": "medium" if value else "low"}
+    clean = [item for item in value if item]
+    return {
+        "value": clean,
+        "source": source if clean else "not_found",
+        "confidence": "medium" if clean else "low",
+        "editable": True,
+        "selected": bool(clean),
+    }
+
+
+def _record_value(value: Any, source: str) -> dict[str, Any]:
+    records = _normalise_records(value)
+    return {
+        "value": records,
+        "source": source if records else "not_found",
+        "confidence": "medium" if records else "low",
+        "editable": True,
+        "selected": bool(records),
+    }
+
+
+def _sanitize_confirmed_cv_fields(accepted: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, raw in (accepted or {}).items():
+        value = _confirmed_value(raw)
+        if isinstance(value, str) and not value.strip():
+            continue
+        if isinstance(value, list) and not value:
+            continue
+        if key in {"skills", "professions"}:
+            value = _confirmed_list(raw)
+        if key in {"workExperience", "education", "certificates", "languages"}:
+            value = _confirmed_records(raw)
+        if value:
+            sanitized[key] = {
+                "value": value,
+                "source": str(raw.get("source") if isinstance(raw, dict) else "user_confirmed_cv_review"),
+                "confidence": str(raw.get("confidence") if isinstance(raw, dict) else "medium"),
+                "confirmed": True,
+            }
+    return sanitized
+
+
+def _confirmed_value(raw: Any) -> Any:
+    if isinstance(raw, dict) and "value" in raw:
+        return raw.get("value")
+    return raw
+
+
+def _confirmed_list(raw: Any) -> list[str]:
+    value = _confirmed_value(raw)
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in re.split(r"[,/|;]", value) if item.strip()]
+    return []
+
+
+def _confirmed_records(raw: Any) -> list[dict[str, Any]]:
+    return _normalise_records(_confirmed_value(raw))
+
+
+def _normalise_records(value: Any) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        records: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, dict):
+                clean = {str(key): val for key, val in item.items() if val not in (None, "", [])}
+                if clean:
+                    records.append(clean)
+            elif str(item).strip():
+                records.append({"title": str(item).strip()})
+        return records
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        return [{"title": item.strip()} for item in re.split(r"\n|;", text) if item.strip()]
+    return [{"title": str(value)}]
 
 
 def _audit(action: str, step: str) -> dict[str, Any]:

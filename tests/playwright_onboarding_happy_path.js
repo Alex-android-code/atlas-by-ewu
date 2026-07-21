@@ -62,7 +62,10 @@ async function dropVirtualFile(page, selector, name, mimeType, content) {
 
   await page.click('[data-action="parse-cv"]');
   await page.waitForSelector('[data-cv-field="email"]');
-  await page.click('[data-action="accept-all-cv"]');
+  await Promise.all([
+    page.waitForResponse((response) => response.url().includes("/api/cv/parse-jobs/accept") && response.ok()),
+    page.click('[data-action="accept-all-cv"]'),
+  ]);
   await next(page);
 
   await page.fill('[data-path="personal_data.fullName"]', "Olena Atlas");
