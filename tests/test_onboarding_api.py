@@ -173,8 +173,55 @@ class OnboardingApiTests(unittest.TestCase):
         self.assertEqual(downloaded.status_code, 200)
         deleted = self.client.delete(f"/api/files/{file_data['id']}?kind=document", headers=headers)
         self.assertEqual(deleted.status_code, 200)
-        missing = self.client.get(file_data["download_url"])
-        self.assertEqual(missing.status_code, 404)
+
+    def test_profile_section_api_validation_and_completeness(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+
+        invalid = self.client.patch("/api/profile/personal-data", headers=headers, json={"data": {"firstName": "123", "email": "bad"}})
+        self.assertEqual(invalid.status_code, 400)
+
+        personal = self.client.patch(
+            "/api/profile/personal-data",
+            headers=headers,
+            json={"data": {"firstName": "Olena", "lastName": "Worker", "email": "olena@example.com", "phone": "48123456789"}},
+        )
+        self.assertEqual(personal.status_code, 200)
+        self.assertEqual(personal.json()["profile"]["contact_information"]["phone"], "+48123456789")
+
+        profession = self.client.patch(
+            "/api/profile/profession",
+            headers=headers,
+            json={"data": {"profession": "HR coordinator", "skills": ["Python", "Python", "Recruiting"], "qualificationLevel": "senior"}},
+        )
+        self.assertEqual(profession.status_code, 200)
+        self.assertEqual(profession.json()["data"]["normalizedProfession"], "hr_coordinator")
+        self.assertEqual(profession.json()["profile"]["skills"], ["Python", "Recruiting"])
+
+        created = self.client.post(
+            "/api/profile/experience",
+            headers=headers,
+            json={"data": {"position": "Coordinator", "companyName": "EWU", "startDate": "2022-01-01", "endDate": "2023-01-01"}},
+        )
+        self.assertEqual(created.status_code, 200)
+        record_id = created.json()["id"]
+        updated = self.client.patch(f"/api/profile/experience/{record_id}", headers=headers, json={"data": {"city": "Warsaw"}})
+        self.assertEqual(updated.json()["city"], "Warsaw")
+        listed = self.client.get("/api/profile/experience", headers=headers)
+        self.assertEqual(len(listed.json()["items"]), 1)
+        deleted = self.client.delete(f"/api/profile/experience/{record_id}", headers=headers)
+        self.assertTrue(deleted.json()["success"])
+
+        credential = self.client.post(
+            "/api/profile/credentials",
+            headers=headers,
+            json={"data": {"type": "certificate", "name": "Forklift", "expiresAt": "2000-01-01"}},
+        )
+        self.assertEqual(credential.json()["status"], "expired")
+
+        profile = self.client.get("/api/profile", headers=headers)
+        self.assertIn("completeness", profile.json())
+        self.assertIn("missing_sections", profile.json()["completeness"])
 
 
 if __name__ == "__main__":

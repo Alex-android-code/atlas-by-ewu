@@ -102,7 +102,9 @@ async function dropVirtualFile(page, selector, name, mimeType, content) {
 
   await page.fill('[data-path="preferences.careerGoal"]', "Logistics coordinator role");
   await page.fill('[data-path="preferences.countriesText"]', "Poland, Germany");
-  await page.fill('[data-path="preferences.salary"]', "5000 PLN");
+  await page.fill('[data-path="preferences.minimumSalary"]', "5000");
+  await page.selectOption('[data-path="preferences.currency"]', "PLN");
+  await page.selectOption('[data-path="preferences.salaryPeriod"]', "month");
   await next(page);
 
   await page.check('[data-path="consents.terms"]');

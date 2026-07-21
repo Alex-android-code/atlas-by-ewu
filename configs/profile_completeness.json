@@ -1,0 +1,10 @@
+{
+  "personal_data": 15,
+  "profession": 15,
+  "skills": 15,
+  "experience": 20,
+  "education_credentials": 10,
+  "languages": 10,
+  "preferences": 10,
+  "photo_cv": 5
+}

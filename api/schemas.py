@@ -326,3 +326,11 @@ class CvParseConfirm(BaseModel):
     acceptedFields: dict[str, Any] = Field(default_factory=dict)
     editedFields: dict[str, Any] = Field(default_factory=dict)
     rejectedFields: list[str] = Field(default_factory=list)
+
+
+class ProfileSectionPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProfileRecordPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 import zipfile
@@ -38,6 +39,7 @@ ONBOARDING_STEPS = [
 SESSION_COLLECTION = "onboarding_sessions"
 CV_JOB_COLLECTION = "cv_parse_jobs"
 DNA_COLLECTION = "professional_dna_scores"
+PROFILE_COMPLETENESS_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "profile_completeness.json"
 
 
 @dataclass
@@ -442,6 +444,87 @@ class OnboardingWorkflowService:
             ],
         }
 
+    def profile(self, user_id: str) -> dict[str, Any]:
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        return {
+            "profile": profile.to_dict(),
+            "completeness": _profile_completeness(profile, self.get_or_start(user_id)),
+        }
+
+    def patch_profile_section(self, user_id: str, section: str, data: dict[str, Any]) -> dict[str, Any]:
+        validators = {
+            "personal_data": _validate_personal_data,
+            "profession": _validate_profession_data,
+            "preferences": _validate_preferences_data,
+        }
+        if section not in validators:
+            raise ValueError(f"Unsupported profile section: {section}")
+        normalized = validators[section](data)
+        session = self.patch_step(user_id, step=section, data=normalized, next_step=section)
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        profile.metadata.setdefault("profile_field_sources", {})[section] = {"source": "manual", "updated_at": utc_now_iso()}
+        profile.metadata.setdefault("profile_change_logs", []).append({"section": section, "action": "patch", "timestamp": utc_now_iso()})
+        profile.profile_completeness = _profile_completeness(profile, session)["percent"]
+        self.agent_profiles.profiles.update(profile)
+        return {"section": section, "data": normalized, "profile": profile.to_dict(), "completeness": _profile_completeness(profile, session)}
+
+    def list_profile_records(self, user_id: str, section: str) -> list[dict[str, Any]]:
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        return list(_profile_record_collection(profile, section))
+
+    def add_profile_record(self, user_id: str, section: str, data: dict[str, Any]) -> dict[str, Any]:
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        record = _validate_profile_record(section, data)
+        records = _profile_record_collection(profile, section)
+        fingerprint = _record_fingerprint(record)
+        for existing in records:
+            if _record_fingerprint(existing) == fingerprint:
+                return existing
+        record["id"] = record.get("id") or new_id(_record_prefix(section))
+        record["created_at"] = record.get("created_at") or utc_now_iso()
+        record["updated_at"] = utc_now_iso()
+        records.append(record)
+        self._save_profile_records(user_id, section, records)
+        return record
+
+    def update_profile_record(self, user_id: str, section: str, record_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        records = self.list_profile_records(user_id, section)
+        for index, record in enumerate(records):
+            if record.get("id") == record_id:
+                updated = _validate_profile_record(section, {**record, **data, "id": record_id})
+                updated["updated_at"] = utc_now_iso()
+                records[index] = updated
+                self._save_profile_records(user_id, section, records)
+                return updated
+        raise ValueError("Profile record not found")
+
+    def delete_profile_record(self, user_id: str, section: str, record_id: str) -> dict[str, Any]:
+        records = self.list_profile_records(user_id, section)
+        remaining = [record for record in records if record.get("id") != record_id]
+        if len(remaining) == len(records):
+            raise ValueError("Profile record not found")
+        self._save_profile_records(user_id, section, remaining)
+        return {"success": True, "deleted": record_id}
+
+    def _save_profile_records(self, user_id: str, section: str, records: list[dict[str, Any]]) -> None:
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        if section == "experience":
+            profile.work_experience = records
+        elif section == "education":
+            profile.education = records
+        elif section == "credentials":
+            profile.certificates = records
+        elif section == "languages":
+            profile.languages = records
+        else:
+            raise ValueError(f"Unsupported profile record section: {section}")
+        session = self.get_or_start(user_id)
+        profile.profile_completeness = _profile_completeness(profile, session)["percent"]
+        profile.updated_at = utc_now_iso()
+        profile.metadata.setdefault("profile_change_logs", []).append({"section": section, "action": "records_update", "timestamp": utc_now_iso()})
+        self.agent_profiles.profiles.update(profile)
+        self._record_activity(user_id, f"profile_{section}_updated", section)
+
     def _sync_step_to_profile(self, user_id: str, step: str, data: dict[str, Any]) -> None:
         if step == "agent":
             profile = self.agent_profiles.get_or_create_profile(user_id)
@@ -450,10 +533,10 @@ class OnboardingWorkflowService:
             self.agent_profiles.profiles.update(profile)
         if step == "personal_data":
             for field, value in {
-                "full_name": data.get("fullName") or data.get("full_name"),
+                "full_name": data.get("fullName") or data.get("full_name") or " ".join(part for part in [data.get("firstName"), data.get("lastName")] if part),
                 "email": data.get("email"),
                 "phone": data.get("phone"),
-                "current_location": data.get("location"),
+                "current_location": data.get("location") or ", ".join(part for part in [data.get("residenceCountry"), data.get("city")] if part),
             }.items():
                 if value:
                     self.agent_profiles.save_onboarding_answer(user_id, field, value)
@@ -461,7 +544,8 @@ class OnboardingWorkflowService:
             if data.get("headline") or data.get("profession"):
                 self.agent_profiles.save_onboarding_answer(user_id, "current_profession", data.get("headline") or data.get("profession"))
             if data.get("skills"):
-                self.agent_profiles.save_onboarding_answer(user_id, "skills", ", ".join(data.get("skills", [])))
+                skill_names = [item.get("name") if isinstance(item, dict) else str(item) for item in data.get("skills", [])]
+                self.agent_profiles.save_onboarding_answer(user_id, "skills", skill_names)
         if step == "experience" and data.get("records"):
             profile = self.agent_profiles.get_or_create_profile(user_id)
             profile.work_experience = _merge_records(profile.work_experience, data["records"])
@@ -1024,6 +1108,198 @@ def _merge_records(existing: list[dict[str, Any]], incoming: Any) -> list[dict[s
 def _record_fingerprint(item: dict[str, Any]) -> str:
     parts = [str(item.get(key, "")).strip().lower() for key in ("title", "name", "organization", "period", "level", "note")]
     return "|".join(part for part in parts if part)
+
+
+def _validate_personal_data(data: dict[str, Any]) -> dict[str, Any]:
+    normalized = {key: _trim(value, 160) for key, value in data.items()}
+    full_name = normalized.get("fullName") or " ".join(part for part in [normalized.get("firstName"), normalized.get("lastName")] if part)
+    if full_name:
+        parts = full_name.split()
+        normalized.setdefault("firstName", parts[0])
+        if len(parts) > 1:
+            normalized.setdefault("lastName", " ".join(parts[1:]))
+    for key in ("firstName", "lastName"):
+        if normalized.get(key) and not re.search(r"[^\W\d_]", normalized[key], re.UNICODE):
+            raise ValueError(f"{key} must contain letters")
+    if normalized.get("birthDate") and normalized["birthDate"] > datetime.now(timezone.utc).date().isoformat():
+        raise ValueError("birthDate cannot be in the future")
+    if normalized.get("email") and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized["email"]):
+        raise ValueError("Invalid email")
+    if normalized.get("phone"):
+        normalized["phone"] = _normalize_phone(normalized["phone"])
+    if normalized.get("workPermitCountries"):
+        normalized["workPermitCountries"] = _string_list(normalized["workPermitCountries"])
+    return normalized
+
+
+def _validate_profession_data(data: dict[str, Any]) -> dict[str, Any]:
+    normalized = {key: value for key, value in data.items()}
+    profession = _trim(data.get("profession") or data.get("primaryProfession"), 120)
+    normalized["profession"] = profession
+    normalized["primaryProfession"] = profession
+    normalized["normalizedProfession"] = _normalize_profession(profession)
+    normalized["additionalProfessions"] = _string_list(data.get("additionalProfessions") or data.get("additionalProfessionsText"))
+    normalized["skills"] = _normalize_skills(data.get("skills") or _string_list(data.get("skillsText")))
+    normalized["tools"] = _string_list(data.get("tools") or data.get("toolsText"))
+    normalized["industries"] = _string_list(data.get("industries") or data.get("industriesText"))
+    normalized["qualificationLevel"] = str(data.get("qualificationLevel") or "").lower()
+    if normalized["qualificationLevel"] and normalized["qualificationLevel"] not in {"trainee", "junior", "middle", "senior", "expert", "manager", "director", "owner/founder"}:
+        raise ValueError("Invalid qualification level")
+    return normalized
+
+
+def _validate_preferences_data(data: dict[str, Any]) -> dict[str, Any]:
+    normalized = {key: value for key, value in data.items()}
+    normalized["desiredProfessions"] = _string_list(data.get("desiredProfessions") or data.get("desiredProfessionsText"))
+    normalized["countries"] = _string_list(data.get("countries") or data.get("countriesText"))
+    normalized["cities"] = _string_list(data.get("cities") or data.get("citiesText"))
+    normalized["salaryExpectation"] = _salary_expectation(data)
+    return normalized
+
+
+def _validate_profile_record(section: str, data: dict[str, Any]) -> dict[str, Any]:
+    if section == "experience":
+        record = {**data, "source": data.get("source") or "manual"}
+        record["position"] = _trim(data.get("position") or data.get("title"), 140)
+        record["companyName"] = _trim(data.get("companyName") or data.get("organization"), 140)
+        record["normalizedPosition"] = _normalize_profession(record["position"])
+        record["responsibilities"] = _string_list(data.get("responsibilities") or data.get("note"))
+        record["achievements"] = _string_list(data.get("achievements"))
+        record["tools"] = _string_list(data.get("tools"))
+        _validate_date_order(record.get("startDate"), None if record.get("isCurrent") else record.get("endDate"))
+        return record
+    if section == "education":
+        record = {**data, "source": data.get("source") or "manual"}
+        record["institution"] = _trim(data.get("institution") or data.get("organization") or data.get("title"), 160)
+        record["degree"] = _trim(data.get("degree") or data.get("title"), 160)
+        _validate_date_order(record.get("startDate"), None if record.get("isCurrent") else record.get("endDate"))
+        return record
+    if section == "credentials":
+        record = {**data, "verified": bool(data.get("verified", False))}
+        record["type"] = data.get("type") if data.get("type") in {"course", "certificate", "license", "permit"} else "certificate"
+        record["name"] = _trim(data.get("name") or data.get("title"), 160)
+        record["status"] = _credential_status(record.get("expiresAt"))
+        return record
+    if section == "languages":
+        level = data.get("level") or data.get("organization") or "A1"
+        if level not in {"A1", "A2", "B1", "B2", "C1", "C2", "native"}:
+            raise ValueError("Invalid language level")
+        return {
+            **data,
+            "languageCode": _trim(data.get("languageCode") or data.get("title") or data.get("name"), 24).lower(),
+            "level": level,
+            "source": data.get("source") or "manual",
+            "verified": bool(data.get("verified", False)),
+        }
+    raise ValueError(f"Unsupported profile record section: {section}")
+
+
+def _profile_record_collection(profile: Any, section: str) -> list[dict[str, Any]]:
+    if section == "experience":
+        return profile.work_experience
+    if section == "education":
+        return profile.education
+    if section == "credentials":
+        return profile.certificates
+    if section == "languages":
+        return profile.languages
+    raise ValueError(f"Unsupported profile record section: {section}")
+
+
+def _record_prefix(section: str) -> str:
+    return {"experience": "EXP", "education": "EDU", "credentials": "CRD", "languages": "LAN"}[section]
+
+
+def _trim(value: Any, max_length: int) -> str:
+    return str(value or "").strip()[:max_length]
+
+
+def _string_list(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return [item.strip() for item in re.split(r"[,;\n|]", str(value or "")) if item.strip()]
+
+
+def _normalize_phone(value: str) -> str:
+    clean = re.sub(r"[^\d+]", "", value)
+    if clean and not clean.startswith("+"):
+        clean = "+" + clean
+    if len(clean) > 18:
+        raise ValueError("Phone is too long")
+    return clean
+
+
+def _normalize_profession(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip().lower())
+    synonyms = {
+        "hr coordinator": "hr_coordinator",
+        "koordynator hr": "hr_coordinator",
+        "координатор персоналу": "hr_coordinator",
+    }
+    if text in synonyms:
+        return synonyms[text]
+    return re.sub(r"[^a-z0-9а-яіїєґąćęłńóśźż]+", "_", text, flags=re.I).strip("_")
+
+
+def _normalize_skills(value: Any) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in _string_list(value):
+        key = _normalize_profession(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append({"id": new_id("SKL"), "name": item, "normalizedKey": key, "source": "manual", "verified": False})
+    return result
+
+
+def _validate_date_order(start: Any, end: Any) -> None:
+    if start and end and str(start) > str(end):
+        raise ValueError("Start date cannot be after end date")
+
+
+def _credential_status(expires_at: Any) -> str:
+    if not expires_at:
+        return "unknown"
+    today = datetime.now(timezone.utc).date()
+    try:
+        expiry = datetime.fromisoformat(str(expires_at)).date()
+    except ValueError:
+        return "unknown"
+    if expiry < today:
+        return "expired"
+    if expiry <= today + timedelta(days=90):
+        return "expiring"
+    return "valid"
+
+
+def _salary_expectation(data: dict[str, Any]) -> dict[str, Any]:
+    minimum = data.get("minimumSalary") or data.get("salary")
+    return {
+        "minimum": float(minimum) if str(minimum or "").replace(".", "", 1).isdigit() else None,
+        "preferred": float(data["preferredSalary"]) if str(data.get("preferredSalary") or "").replace(".", "", 1).isdigit() else None,
+        "currency": str(data.get("currency") or "PLN"),
+        "period": data.get("salaryPeriod") if data.get("salaryPeriod") in {"hour", "month", "year"} else "month",
+        "grossNet": data.get("grossNet") if data.get("grossNet") in {"gross", "net", "unknown"} else "unknown",
+    }
+
+
+def _profile_completeness(profile: Any, session: dict[str, Any]) -> dict[str, Any]:
+    weights = json.loads(PROFILE_COMPLETENESS_CONFIG.read_text(encoding="utf-8"))
+    checks = {
+        "personal_data": bool(profile.personal_information.get("full_name") or profile.contact_information.get("email")),
+        "profession": bool(profile.professional_summary or profile.preferred_roles),
+        "skills": bool(profile.skills),
+        "experience": bool(profile.work_experience),
+        "education_credentials": bool(profile.education or profile.certificates),
+        "languages": bool(profile.languages),
+        "preferences": bool(profile.career_goals or profile.relocation_preferences),
+        "photo_cv": bool(profile.profile_photo) and bool(profile.uploaded_cv),
+    }
+    percent = sum(weight for key, weight in weights.items() if checks.get(key))
+    missing = [key for key, complete in checks.items() if not complete]
+    next_best = max(missing, key=lambda key: weights.get(key, 0), default=None)
+    return {"percent": int(percent), "weights": weights, "missing_sections": missing, "next_best_section": next_best}
 
 
 def _confidence_number(value: Any) -> float:

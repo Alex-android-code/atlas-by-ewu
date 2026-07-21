@@ -72,6 +72,8 @@ from api.schemas import (
     LoginRequest,
     MatchRequest,
     OnboardingStepPatch,
+    ProfileRecordPayload,
+    ProfileSectionPayload,
     SkillGapAnalysisRequest,
     StatusUpdate,
     TargetCompetencyRequirement,
@@ -775,6 +777,67 @@ def complete_onboarding_workflow(request: Request) -> dict:
     professional_dna = result.get("dashboard", {}).get("professional_dna", {})
     result["crm_sync"] = _sync_agent_profile_to_crm(user_id, professional_dna)
     return result
+
+
+@app.get("/api/profile")
+def get_profile(request: Request) -> dict:
+    return get_onboarding_workflow_service().profile(_onboarding_owner_id(request))
+
+
+@app.patch("/api/profile/personal-data")
+def patch_profile_personal_data(payload: ProfileSectionPayload, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().patch_profile_section(_onboarding_owner_id(request), "personal_data", payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/profile/profession")
+def patch_profile_profession(payload: ProfileSectionPayload, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().patch_profile_section(_onboarding_owner_id(request), "profession", payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/profile/preferences")
+def patch_profile_preferences(payload: ProfileSectionPayload, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().patch_profile_section(_onboarding_owner_id(request), "preferences", payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/profile/{section}")
+def list_profile_section(section: str, request: Request) -> dict:
+    try:
+        return {"items": get_onboarding_workflow_service().list_profile_records(_onboarding_owner_id(request), section)}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/profile/{section}")
+def create_profile_section_record(section: str, payload: ProfileRecordPayload, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().add_profile_record(_onboarding_owner_id(request), section, payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.patch("/api/profile/{section}/{record_id}")
+def update_profile_section_record(section: str, record_id: str, payload: ProfileRecordPayload, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().update_profile_record(_onboarding_owner_id(request), section, record_id, payload.data)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.delete("/api/profile/{section}/{record_id}")
+def delete_profile_section_record(section: str, record_id: str, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().delete_profile_record(_onboarding_owner_id(request), section, record_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
 
 
 @app.post("/api/files/upload")

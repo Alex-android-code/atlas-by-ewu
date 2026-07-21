@@ -186,6 +186,7 @@ AGENT_ONBOARDING_HTML = r"""
       <div id="error" class="error"></div>
       <div class="actions">
         <button class="secondary" id="back" type="button">Назад</button>
+        <button class="secondary" id="save" type="button">Зберегти відповідь</button>
         <button class="primary" id="next" type="button">Продовжити</button>
       </div>
     </section>
@@ -199,6 +200,7 @@ AGENT_ONBOARDING_HTML = r"""
     let local = {};
     let selectedParsed = {};
     let pendingCvDecision = false;
+    let autosaveTimer = null;
     const uploadRuntime = {};
     const uploadConfigs = {
       profile_photo: {
@@ -234,6 +236,7 @@ AGENT_ONBOARDING_HTML = r"""
     const bar = document.getElementById("progress-bar");
     const errorBox = document.getElementById("error");
     const backButton = document.getElementById("back");
+    const saveButton = document.getElementById("save");
     const nextButton = document.getElementById("next");
 
     async function api(path, options = {}) {
@@ -314,16 +317,34 @@ AGENT_ONBOARDING_HTML = r"""
           <div id="cv-review">${cvReviewTemplate()}</div>
         </div>`,
       personal_data: () => formGrid("Особисті дані", [
+        input("personal_data.firstName", "Ім'я *", val("personal_data.firstName")),
+        input("personal_data.lastName", "Прізвище *", val("personal_data.lastName")),
         input("personal_data.fullName", "Повне ім'я", val("personal_data.fullName") || parsed("fullName")),
+        input("personal_data.birthDate", "Дата народження", val("personal_data.birthDate"), "date"),
+        input("personal_data.citizenship", "Громадянство", val("personal_data.citizenship")),
+        input("personal_data.residenceCountry", "Країна проживання", val("personal_data.residenceCountry")),
+        input("personal_data.city", "Місто", val("personal_data.city")),
+        input("personal_data.address", "Адреса (необов'язково)", val("personal_data.address")),
         input("personal_data.email", "Email", val("personal_data.email") || parsed("email")),
         input("personal_data.phone", "Телефон", val("personal_data.phone") || parsed("phone")),
+        select("personal_data.preferredContact", "Бажаний канал зв'язку", ["email","phone","telegram","whatsapp"], val("personal_data.preferredContact") || "email"),
+        select("personal_data.workAuthorization", "Право на роботу", ["unknown","eu","permit","visa","none"], val("personal_data.workAuthorization") || "unknown"),
+        input("personal_data.workPermitCountries", "Країни з дозволом на роботу", val("personal_data.workPermitCountries")),
         input("personal_data.location", "Місто / країна", val("personal_data.location") || parsed("location")),
         textarea("personal_data.summary", "Коротке професійне резюме", val("personal_data.summary"))
       ]),
       profession: () => formGrid("Професія та навички", [
-        input("profession.profession", "Професія", val("profession.profession")),
+        input("profession.profession", "Основна професія", val("profession.profession")),
+        input("profession.additionalProfessionsText", "Додаткові професії", val("profession.additionalProfessionsText")),
+        input("profession.specialization", "Спеціалізація", val("profession.specialization")),
+        select("profession.qualificationLevel", "Рівень кваліфікації", ["","trainee","junior","middle","senior","expert","manager","director","owner/founder"], val("profession.qualificationLevel")),
+        input("profession.totalExperienceYears", "Загальний стаж", val("profession.totalExperienceYears"), "number"),
         input("profession.headline", "Професійний заголовок", val("profession.headline") || parsed("headline")),
         textarea("profession.skillsText", "Навички через кому", val("profession.skillsText") || listText("skills")),
+        textarea("profession.toolsText", "Інструменти та технології", val("profession.toolsText")),
+        textarea("profession.industriesText", "Галузі", val("profession.industriesText")),
+        select("profession.workerType", "Тип працівника", ["employee","contractor","freelancer","temporary","intern"], val("profession.workerType") || "employee"),
+        select("profession.currentStatus", "Поточний статус", ["available","employed","open_to_offers","student","unavailable"], val("profession.currentStatus") || "available"),
         input("profession.customSkill", "Додати власну навичку", "")
       ]),
       experience: () => recordsTemplate("experience", "Досвід роботи", ["Посада","Компанія","Період","Опис"]),
@@ -331,9 +352,23 @@ AGENT_ONBOARDING_HTML = r"""
       languages: () => recordsTemplate("languages", "Мови", ["Мова","CEFR рівень","Практика","Примітка"]),
       preferences: () => formGrid("Кар'єрні побажання", [
         textarea("preferences.careerGoal", "Бажана роль і ціль", val("preferences.careerGoal")),
+        input("preferences.desiredProfessionsText", "Бажані професії", val("preferences.desiredProfessionsText")),
         input("preferences.countriesText", "Країни через кому", val("preferences.countriesText")),
+        input("preferences.citiesText", "Міста або регіони", val("preferences.citiesText")),
+        select("preferences.relocationReadiness", "Готовність до релокації", ["unknown","yes","no","maybe"], val("preferences.relocationReadiness") || "unknown"),
+        select("preferences.businessTravel", "Відрядження", ["unknown","yes","no","limited"], val("preferences.businessTravel") || "unknown"),
         select("preferences.format", "Формат роботи", ["будь-який","офіс","гібрид","віддалено","вахтовий"], val("preferences.format") || "будь-який"),
-        input("preferences.salary", "Очікувана зарплата / валюта", val("preferences.salary"))
+        input("preferences.minimumSalary", "Мінімальна зарплата", val("preferences.minimumSalary"), "number"),
+        input("preferences.preferredSalary", "Бажана зарплата", val("preferences.preferredSalary"), "number"),
+        select("preferences.currency", "Валюта", ["PLN","EUR","USD","UAH"], val("preferences.currency") || "PLN"),
+        select("preferences.salaryPeriod", "Період зарплати", ["hour","month","year"], val("preferences.salaryPeriod") || "month"),
+        select("preferences.grossNet", "Gross / Net", ["unknown","gross","net"], val("preferences.grossNet") || "unknown"),
+        input("preferences.startDate", "Дата готовності почати", val("preferences.startDate"), "date"),
+        select("preferences.desiredLevel", "Бажаний рівень посади", ["","trainee","junior","middle","senior","expert","manager","director"], val("preferences.desiredLevel")),
+        textarea("preferences.unwantedWorkTypes", "Небажані типи роботи", val("preferences.unwantedWorkTypes")),
+        select("preferences.housingNeeded", "Потреба в житлі", ["unknown","yes","no"], val("preferences.housingNeeded") || "unknown"),
+        select("preferences.transportNeeded", "Потреба в транспорті", ["unknown","yes","no"], val("preferences.transportNeeded") || "unknown"),
+        select("preferences.legalizationNeeded", "Потреба в легалізації", ["unknown","yes","no"], val("preferences.legalizationNeeded") || "unknown")
       ]),
       consents: () => `
         <h2>GDPR / RODO центр</h2>
@@ -388,6 +423,21 @@ AGENT_ONBOARDING_HTML = r"""
       render();
     }
 
+    async function saveCurrentStep({silent = false} = {}) {
+      if (!["personal_data","profession","experience","education","languages","preferences"].includes(current)) return;
+      const data = collectStepData(current);
+      if (!validate(current, data)) return;
+      session = await api("/api/onboarding", {method: "PATCH", body: JSON.stringify({step: current, data, next_step: current}), headers});
+      local = structuredClone(session.data || {});
+      if (!silent) fail("Відповідь збережено.");
+    }
+
+    function scheduleAutosave() {
+      if (!["personal_data","profession","experience","education","languages","preferences"].includes(current)) return;
+      clearTimeout(autosaveTimer);
+      autosaveTimer = setTimeout(() => saveCurrentStep({silent: true}).catch((error) => fail(error.message)), 700);
+    }
+
     function previous() {
       const index = steps.indexOf(current);
       if (index > 0) {
@@ -401,11 +451,17 @@ AGENT_ONBOARDING_HTML = r"""
         const data = local.profession || {};
         const skills = splitList(data.skillsText);
         if (data.customSkill) skills.push(data.customSkill);
-        return {...data, skills: [...new Set(skills.map((item) => item.trim()).filter(Boolean))]};
+        return {
+          ...data,
+          additionalProfessions: splitList(data.additionalProfessionsText),
+          tools: splitList(data.toolsText),
+          industries: splitList(data.industriesText),
+          skills: [...new Set(skills.map((item) => item.trim()).filter(Boolean))]
+        };
       }
       if (step === "preferences") {
         const data = local.preferences || {};
-        return {...data, countries: splitList(data.countriesText)};
+        return {...data, desiredProfessions: splitList(data.desiredProfessionsText), countries: splitList(data.countriesText), cities: splitList(data.citiesText)};
       }
       if (step === "cv_review") {
         return {
@@ -422,7 +478,7 @@ AGENT_ONBOARDING_HTML = r"""
       if (step === "profile_photo" && !data.file?.id) return fail("Додайте фото профілю.");
       if (step === "cv" && !data.file?.id) return fail("Додайте CV або резюме.");
       if (step === "cv_review" && !hasAcceptedCvData() && !local.cv?.parse_rejected) return fail("Прийміть поля з CV або відхиліть витягнуті дані.");
-      if (step === "personal_data" && (!data.fullName || !data.email)) return fail("Вкажіть ім'я та email.");
+      if (step === "personal_data" && (!(data.fullName || (data.firstName && data.lastName)) || !data.email)) return fail("Вкажіть ім'я, прізвище та email.");
       if (step === "consents" && (!data.terms || !data.privacy || !data.aiProcessing)) return fail("Потрібні всі обов'язкові згоди.");
       return true;
     }
@@ -868,7 +924,7 @@ AGENT_ONBOARDING_HTML = r"""
       return `<h2>${title}</h2><div class="grid">${labels.map((label) => `<label>${label}<input data-record="${step}"></label>`).join("")}</div><div class="actions"><button class="secondary" data-action="add-record" data-step="${step}" type="button">Додати запис</button></div><div class="grid" style="margin-top:14px">${records.map((record, index) => `<div class="card"><h3>${escapeHtml(record.title || "Запис")}</h3><p>${escapeHtml([record.organization, record.period, record.note].filter(Boolean).join(" · "))}</p><button class="danger" data-action="remove-record" data-step="${step}" data-index="${index}" type="button">Видалити</button></div>`).join("")}</div>`;
     }
 
-    function input(path, label, value = "") { return `<label>${label}<input data-path="${path}" value="${escapeHtml(value)}"></label>`; }
+    function input(path, label, value = "", type = "text") { return `<label>${label}<input type="${type}" data-path="${path}" value="${escapeHtml(value)}"></label>`; }
     function textarea(path, label, value = "") { return `<label>${label}<textarea data-path="${path}">${escapeHtml(value)}</textarea></label>`; }
     function select(path, label, options, value = "") { return `<label>${label}<select data-path="${path}">${options.map((option) => `<option ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`; }
     function consent(path, label, required) {
@@ -894,6 +950,7 @@ AGENT_ONBOARDING_HTML = r"""
         target = target[key];
       }
       target[parts[0]] = value;
+      scheduleAutosave();
     }
     function splitList(value) { return String(value || "").split(",").map((item) => item.trim()).filter(Boolean); }
     function hasAcceptedCvData() { return Object.keys(local.cv?.accepted_parsed_data || {}).length > 0; }
@@ -903,6 +960,7 @@ AGENT_ONBOARDING_HTML = r"""
     }
 
     backButton.addEventListener("click", previous);
+    saveButton.addEventListener("click", () => saveCurrentStep().catch((error) => fail(error.message)));
     nextButton.addEventListener("click", () => next().catch((error) => fail(error.message)));
     load().catch((error) => fail(error.message));
   </script>
