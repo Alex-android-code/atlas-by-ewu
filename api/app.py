@@ -28,6 +28,7 @@ from api.dependencies import (
     get_development_recommendation_service,
     get_dynamic_interview_service,
     get_entitlement_service,
+    get_employer_onboarding_workflow_service,
     get_onboarding_workflow_service,
     get_operations_workflow,
     get_product_architecture_service,
@@ -35,6 +36,7 @@ from api.dependencies import (
     get_skill_gap_service,
 )
 from api.employer import EMPLOYER_HTML as EMPLOYER_CHAT_HTML
+from api.employer_onboarding_page import EMPLOYER_DASHBOARD_HTML, EMPLOYER_ONBOARDING_HTML
 from api.ewu_bot_webhook import configure_ewu_bot_webhook, router as ewu_bot_router
 from api.login import LOGIN_HTML
 from api.main_interface import CORPORATE_HTML, EMPLOYEE_HTML, EMPLOYER_HTML, GDPR_HTML, LANDING_HTML, country_detail_html
@@ -71,6 +73,7 @@ from api.schemas import (
     EntitlementCheckRequest,
     EmployerCreate,
     EmployerCompetencyRequirementCreate,
+    EmployerOnboardingStepPatch,
     LoginRequest,
     MatchRequest,
     OnboardingStepPatch,
@@ -251,6 +254,57 @@ def localized_ai_chat(language_code: str) -> str:
 @app.get("/employer", response_class=HTMLResponse)
 def employer_experience() -> str:
     return EMPLOYER_HTML
+
+
+@app.get("/employer/onboarding", response_class=HTMLResponse)
+def employer_onboarding_page() -> str:
+    return EMPLOYER_ONBOARDING_HTML
+
+
+@app.get("/employer/dashboard", response_class=HTMLResponse)
+def employer_dashboard_page() -> str:
+    return EMPLOYER_DASHBOARD_HTML
+
+
+@app.get("/api/employer/onboarding")
+def get_employer_onboarding_session(request: Request) -> dict:
+    return get_employer_onboarding_workflow_service().get_or_start(_onboarding_owner_id(request))
+
+
+@app.patch("/api/employer/onboarding")
+def patch_employer_onboarding_session(payload: EmployerOnboardingStepPatch, request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().patch_step(
+            _onboarding_owner_id(request),
+            payload.step,
+            payload.data,
+            next_step=payload.next_step,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/employer/onboarding/complete")
+def complete_employer_onboarding(request: Request) -> dict:
+    try:
+        return get_employer_onboarding_workflow_service().complete(_onboarding_owner_id(request))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/employer/dashboard")
+def get_employer_dashboard(request: Request) -> dict:
+    return get_employer_onboarding_workflow_service().dashboard(_onboarding_owner_id(request))
+
+
+@app.get("/{language_code}/employer/onboarding", response_class=HTMLResponse)
+def localized_employer_onboarding_page(language_code: str) -> str:
+    return EMPLOYER_ONBOARDING_HTML
+
+
+@app.get("/{language_code}/employer/dashboard", response_class=HTMLResponse)
+def localized_employer_dashboard_page(language_code: str) -> str:
+    return EMPLOYER_DASHBOARD_HTML
 
 
 @app.get("/employer/chat", response_class=HTMLResponse)

@@ -350,3 +350,9 @@ class PrivacyRequestCreate(BaseModel):
     request_type: str
     contact: str = ""
     note: str = ""
+
+
+class EmployerOnboardingStepPatch(BaseModel):
+    step: str
+    data: dict[str, Any] = Field(default_factory=dict)
+    next_step: str | None = None

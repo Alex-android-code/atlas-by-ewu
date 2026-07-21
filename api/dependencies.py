@@ -52,6 +52,7 @@ from database.repositories import (
 )
 from memory.memory_store import JsonMemoryStore
 from services.agent_profile_service import AgentProfileService
+from services.employer_onboarding_workflow import EmployerOnboardingWorkflowService
 from services.agent_collaboration import AgentCollaborationRepositories, AgentCollaborationService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
 from services.country_config_loader import CountryConfigLoader
@@ -120,6 +121,16 @@ def get_onboarding_workflow_service() -> OnboardingWorkflowService:
         database=database,
         agent_profiles=get_agent_profile_service(),
         consents=ConsentRepository(database),
+        documents=DocumentRepository(database),
+        activity=ActivityRepository(database),
+    )
+
+
+def get_employer_onboarding_workflow_service() -> EmployerOnboardingWorkflowService:
+    database = get_database()
+    return EmployerOnboardingWorkflowService(
+        database=database,
+        employers=EmployerRepository(database),
         documents=DocumentRepository(database),
         activity=ActivityRepository(database),
     )
