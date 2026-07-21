@@ -1,0 +1,14 @@
+{
+  "version": "professional_dna_scoring_v1",
+  "weights": {
+    "profileCompleteness": 15,
+    "experienceScore": 20,
+    "skillsScore": 15,
+    "educationScore": 10,
+    "languagesScore": 10,
+    "mobilityScore": 10,
+    "documentReadinessScore": 10,
+    "marketReadinessScore": 10
+  },
+  "componentMax": 100
+}

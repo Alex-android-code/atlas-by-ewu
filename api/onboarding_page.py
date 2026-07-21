@@ -159,6 +159,8 @@ AGENT_ONBOARDING_HTML = r"""
     .chip { border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px; color: var(--muted); background: rgba(255,255,255,0.04); }
     .consent-row { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; padding: 12px 0; border-bottom: 1px solid rgba(238,241,246,0.08); }
     .consent-row input { width: 18px; min-height: 18px; margin-top: 3px; }
+    .consent-meta { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+    .consent-meta a { color: var(--silver); }
     .dna-score { font-size: clamp(48px, 10vw, 92px); line-height: 1; color: var(--gold); font-weight: 900; }
     .hidden { display: none !important; }
     @media (max-width: 760px) {
@@ -195,6 +197,19 @@ AGENT_ONBOARDING_HTML = r"""
     let userId = localStorage.getItem("atlas_user_id") || "";
     let headers = {"Content-Type": "application/json"};
     const steps = ["welcome","agent","profile_photo","cv","cv_review","personal_data","profession","experience","education","languages","preferences","consents","professional_dna","completed"];
+    const consentCopy = {
+      terms: "Defines the base ATLAS account terms.",
+      privacy: "Explains how profile, account and document data are processed.",
+      platformProcessing: "Allows core platform processing needed for ATLAS to work.",
+      profileStorage: "Allows ATLAS to save profile data and onboarding progress.",
+      documentProcessing: "Allows private storage, validation, preview and technical extraction for uploaded documents.",
+      aiCvAnalysis: "Allows AI-assisted CV analysis; without it external AI processing stays disabled.",
+      aiMatching: "Allows automated job matching from confirmed profile data.",
+      employerProfileShare: "Allows profile sharing with a specific employer after a separate decision.",
+      marketing: "Allows non-essential product and partner messages.",
+      personalizedRecommendations: "Allows additional personalization beyond the core onboarding result.",
+      anonymousAnalytics: "Allows anonymized analytics for service improvement."
+    };
     let session = null;
     let current = "welcome";
     let local = {};
@@ -372,12 +387,21 @@ AGENT_ONBOARDING_HTML = r"""
       ]),
       consents: () => `
         <h2>GDPR / RODO центр</h2>
-        <p>Обов'язкові згоди потрібні для створення профілю та AI-агента. Опціональні згоди не встановлені за замовчуванням.</p>
-        ${consent("terms", "Погоджуюся з умовами використання ATLAS", true)}
-        ${consent("privacy", "Погоджуюся з політикою приватності та обробкою персональних даних", true)}
-        ${consent("aiProcessing", "Дозволяю AI-обробку даних для створення Professional DNA", true)}
-        ${consent("marketing", "Дозволяю маркетингові повідомлення", false)}
-        ${consent("analytics", "Дозволяю покращення продукту через аналітику", false)}`,
+        <p>Обов'язкові згоди потрібні для роботи платформи. Необов'язкові можна змінити пізніше.</p>
+        <div class="actions"><button class="secondary" data-action="accept-required-consents" type="button">Прийняти обов'язкові</button></div>
+        <h3>Обов'язкові</h3>
+        ${consent("terms", "Terms of Service · v2", true)}
+        ${consent("privacy", "Privacy Policy · v2", true)}
+        ${consent("platformProcessing", "Обробка даних для роботи платформи · v2", true)}
+        ${consent("profileStorage", "Збереження профілю · v2", true)}
+        ${consent("documentProcessing", "Технічна обробка документів · v2", true)}
+        <h3>Необов'язкові</h3>
+        ${consent("aiCvAnalysis", "AI-аналіз CV", false)}
+        ${consent("aiMatching", "AI Matching", false)}
+        ${consent("employerProfileShare", "Передача профілю роботодавцю", false)}
+        ${consent("marketing", "Маркетингові повідомлення", false)}
+        ${consent("personalizedRecommendations", "Персоналізовані рекомендації", false)}
+        ${consent("anonymousAnalytics", "Анонімізована аналітика для покращення сервісу", false)}`,
       professional_dna: () => dnaTemplate(),
       completed: () => `
         <h1>Профіль створено</h1>
@@ -397,6 +421,7 @@ AGENT_ONBOARDING_HTML = r"""
       document.querySelector("[data-action='accept-cv']")?.addEventListener("click", acceptCv);
       document.querySelector("[data-action='reject-cv']")?.addEventListener("click", rejectCv);
       document.querySelector("[data-action='generate-dna']")?.addEventListener("click", generateDna);
+      document.querySelector("[data-action='accept-required-consents']")?.addEventListener("click", acceptRequiredConsents);
       document.querySelector("[data-action='add-record']")?.addEventListener("click", addRecordFromForm);
       document.querySelectorAll("[data-action='remove-record']").forEach((button) => button.addEventListener("click", removeRecord));
       document.querySelector("[data-action='view-file']")?.addEventListener("click", viewFile);
@@ -470,7 +495,7 @@ AGENT_ONBOARDING_HTML = r"""
           job_id: session?.parsed_cv?.job_id || ""
         };
       }
-      if (step === "consents") return {...(local.consents || {}), version: "atlas-rodo-v1", language: local.agent?.language || "uk"};
+      if (step === "consents") return {...(local.consents || {}), version: "atlas-rodo-v2", language: local.agent?.language || "uk"};
       return local[step] || {};
     }
 
@@ -479,8 +504,13 @@ AGENT_ONBOARDING_HTML = r"""
       if (step === "cv" && !data.file?.id) return fail("Додайте CV або резюме.");
       if (step === "cv_review" && !hasAcceptedCvData() && !local.cv?.parse_rejected) return fail("Прийміть поля з CV або відхиліть витягнуті дані.");
       if (step === "personal_data" && (!(data.fullName || (data.firstName && data.lastName)) || !data.email)) return fail("Вкажіть ім'я, прізвище та email.");
-      if (step === "consents" && (!data.terms || !data.privacy || !data.aiProcessing)) return fail("Потрібні всі обов'язкові згоди.");
+      if (step === "consents" && (!data.terms || !data.privacy || !data.platformProcessing || !data.profileStorage || !data.documentProcessing)) return fail("Потрібні всі обов'язкові згоди.");
       return true;
+    }
+
+    function acceptRequiredConsents() {
+      ["terms","privacy","platformProcessing","profileStorage","documentProcessing"].forEach((key) => setPath(`consents.${key}`, true));
+      render();
     }
 
     function fail(message) {
@@ -912,7 +942,13 @@ AGENT_ONBOARDING_HTML = r"""
       if (!dna) {
         return `<h2>Professional DNA v1</h2><p>Система створить першу детерміновану оцінку без зовнішніх AI-ключів: готовність профілю, документи, навички, мови, мобільність і рекомендації.</p><button class="primary" data-action="generate-dna" type="button">Згенерувати Professional DNA</button>`;
       }
-      return `<h2>Professional DNA v1</h2><div class="dna-score">${dna.overallScore}%</div><div class="grid"><div class="card"><h3>Сильні сторони</h3><ul>${dna.strengths.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div><div class="card"><h3>Прогалини</h3><ul>${(dna.gaps.length ? dna.gaps : ["Критичних прогалин не знайдено."]).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div></div><div class="chips">${dna.recommendedActions.map((x) => `<span class="chip">${escapeHtml(x)}</span>`).join("")}</div>`;
+      const components = dna.components || {};
+      const insight = (item) => typeof item === "string" ? item : `${item.title}: ${item.description || ""}`;
+      return `<h2>Professional DNA v1</h2><div class="dna-score">${dna.overallScore}%</div>
+        <div class="grid">${Object.entries(components).map(([key, item]) => `<div class="card"><h3>${escapeHtml(key)}</h3><p>${escapeHtml(item.score)} / 100 · weight ${escapeHtml(item.weight)}%</p></div>`).join("")}</div>
+        <div class="grid"><div class="card"><h3>Сильні сторони</h3><ul>${(dna.strengths || []).map((x) => `<li>${escapeHtml(insight(x))}</li>`).join("")}</ul></div><div class="card"><h3>Прогалини</h3><ul>${((dna.gaps || []).length ? dna.gaps : [{title:"Критичних прогалин не знайдено.", description:""}]).map((x) => `<li>${escapeHtml(insight(x))}</li>`).join("")}</ul></div></div>
+        <div class="chips">${(dna.recommendations || []).slice(0,5).map((x) => `<span class="chip">${escapeHtml(x.title || x)}</span>`).join("")}</div>
+        <p class="small">Scoring: ${escapeHtml(dna.scoringConfigVersion || "professional_dna_scoring_v1")} · ${escapeHtml(dna.generatedAt || "")}</p>`;
     }
 
     function formGrid(title, fields) {
@@ -929,7 +965,8 @@ AGENT_ONBOARDING_HTML = r"""
     function select(path, label, options, value = "") { return `<label>${label}<select data-path="${path}">${options.map((option) => `<option ${option === value ? "selected" : ""}>${escapeHtml(option)}</option>`).join("")}</select></label>`; }
     function consent(path, label, required) {
       const checked = Boolean(val(`consents.${path}`));
-      return `<label class="consent-row"><input type="checkbox" data-path="consents.${path}" ${checked ? "checked" : ""}><span>${label} ${required ? "<strong>(обов'язково)</strong>" : "(опціонально)"}</span></label>`;
+      const status = required ? "<strong>(обов'язково)</strong>" : "(опціонально)";
+      return `<label class="consent-row"><input type="checkbox" data-path="consents.${path}" ${checked ? "checked" : ""}><span>${label} ${status}<small class="consent-meta">${escapeHtml(consentCopy[path] || "")} Policy atlas-rodo-v2 · <a href="/gdpr" target="_blank" rel="noreferrer">Детальніше</a></small></span></label>`;
     }
     function val(path) { return path.split(".").reduce((acc, key) => acc?.[key], local) || ""; }
     function parsed(key) {

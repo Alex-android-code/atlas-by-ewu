@@ -23,8 +23,14 @@ DEFAULT_CONSENT_SCOPES = [
     "ai_assistance",
     "operations_crm",
 ]
-DATA_SUBJECT_REQUEST_TYPES = {"export", "delete", "rectify", "restrict_processing"}
-DATA_SUBJECT_REQUEST_STATUSES = {"pending", "verified", "completed", "rejected"}
+DATA_SUBJECT_REQUEST_TYPES = {"export", "delete", "rectify", "restrict_processing", "consent_withdrawal"}
+DATA_SUBJECT_REQUEST_ALIASES = {
+    "data_export": "export",
+    "account_deletion": "delete",
+    "correction": "rectify",
+    "processing_restriction": "restrict_processing",
+}
+DATA_SUBJECT_REQUEST_STATUSES = {"requested", "pending", "verifying", "processing", "verified", "completed", "rejected"}
 
 
 class RodoService:
@@ -92,13 +98,14 @@ class RodoService:
         language: str = "uk",
         note: str = "",
     ) -> DataSubjectRequest:
-        normalized_type = request_type.strip().lower()
+        normalized_type = DATA_SUBJECT_REQUEST_ALIASES.get(request_type.strip().lower(), request_type.strip().lower())
         if normalized_type not in DATA_SUBJECT_REQUEST_TYPES:
             raise ValueError(f"Unsupported RODO request type: {request_type}")
         request = DataSubjectRequest(
             subject_id=subject_id,
             request_type=normalized_type,
             contact=contact,
+            status="requested",
             metadata={"language": language, "note": note},
         )
         return self.data_subject_requests.add(request)

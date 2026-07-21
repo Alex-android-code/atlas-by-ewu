@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 import zipfile
+import json
 from pathlib import Path
 
 from database.json_database import JsonDatabase
@@ -17,7 +18,7 @@ from database.repositories import (
     UserPreferenceRepository,
 )
 from services.agent_profile_service import AgentProfileService
-from services.onboarding_workflow import OnboardingWorkflowService
+from services.onboarding_workflow import DNA_SCORING_CONFIG, OnboardingWorkflowService
 
 
 class OnboardingWorkflowServiceTests(unittest.TestCase):
@@ -157,6 +158,40 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         )
         self.assertIn("privacy", saved["consents"])
 
+    def test_consent_center_tracks_optional_decline_and_withdrawal_history(self) -> None:
+        choices = {
+            "terms": True,
+            "privacy": True,
+            "platformProcessing": True,
+            "profileStorage": True,
+            "documentProcessing": True,
+            "aiCvAnalysis": False,
+            "aiMatching": True,
+            "marketing": False,
+        }
+
+        saved = self.service.save_consent_choices("user-1", choices, source="dashboard")
+        withdrawn = self.service.withdraw_consent("user-1", "aiMatching", reason="manual opt-out")
+        center = self.service.consent_center("user-1")
+        history = self.service.consent_history("user-1")
+
+        optional = {item["type"]: item for item in center["optional"]}
+        self.assertTrue(saved["center"]["canContinue"])
+        self.assertFalse(optional["aiCvAnalysis"]["selected"])
+        self.assertEqual(optional["aiMatching"]["status"], "withdrawn")
+        self.assertIn("matching", withdrawn["consequence"].lower())
+        self.assertGreaterEqual(len(history), 12)
+        self.assertEqual(history[-1]["metadata"]["reason"], "manual opt-out")
+
+    def test_cv_parse_policy_guard_blocks_external_ai_without_consent(self) -> None:
+        file_data = {"id": "ONB-CV", "original_name": "cv.pdf", "stored_name": "ONB-CV.pdf"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+
+        job = self.service.parse_cv("user-1", "ONB-CV")
+
+        self.assertFalse(job["policy_guard"]["aiCvAnalysis"])
+        self.assertFalse(job["policy_guard"]["externalAiUsed"])
+
     def test_profile_forms_sync_structured_records_without_duplicates(self) -> None:
         experience = {"records": [{"title": "Coordinator", "organization": "EWU", "period": "2022-2024", "note": "Logistics"}]}
         education = {"records": [{"title": "Logistics course", "organization": "ATLAS Academy", "period": "2023"}]}
@@ -186,6 +221,24 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         self.assertIn("formula", dna)
         self.assertEqual(completed["session"]["status"], "completed")
         self.assertEqual(completed["session"]["current_step"], "completed")
+
+    def test_professional_dna_uses_configured_weights_and_structured_explanation(self) -> None:
+        config = json.loads(DNA_SCORING_CONFIG.read_text(encoding="utf-8"))
+        self.assertEqual(sum(config["weights"].values()), 100)
+        self.service.patch_step("user-1", step="profession", data={"profession": "Logistics coordinator", "skills": ["CRM", "Logistics"]})
+        self.service.patch_step("user-1", step="experience", data={"records": [{"title": "Coordinator", "note": "Operations"}]})
+        self.service.patch_step("user-1", step="languages", data={"records": [{"title": "Polish", "organization": "B2"}]})
+
+        dna = self.service.generate_dna("user-1")
+        explanation = self.service.dna_explanation("user-1")
+
+        self.assertGreaterEqual(dna["overallScore"], 0)
+        self.assertLessEqual(dna["overallScore"], 100)
+        self.assertEqual(dna["scoringConfigVersion"], config["version"])
+        self.assertEqual(set(dna["components"]), set(config["weights"]))
+        self.assertTrue(dna["strengths"])
+        self.assertIn("formula", explanation)
+        self.assertIn("recommendations", explanation)
 
 
 if __name__ == "__main__":

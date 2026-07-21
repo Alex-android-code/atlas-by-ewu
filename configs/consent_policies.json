@@ -1,0 +1,105 @@
+{
+  "policyVersion": "atlas-rodo-v2",
+  "effectiveDate": "2026-07-21",
+  "policies": [
+    {
+      "type": "terms",
+      "required": true,
+      "title": "Terms of Service",
+      "description": "Required to create and use an ATLAS account.",
+      "documentType": "terms",
+      "url": "/gdpr",
+      "hash": "terms-atlas-rodo-v2"
+    },
+    {
+      "type": "privacy",
+      "required": true,
+      "title": "Privacy Policy",
+      "description": "Required for lawful processing of your profile and account data.",
+      "documentType": "privacy_policy",
+      "url": "/gdpr",
+      "hash": "privacy-atlas-rodo-v2"
+    },
+    {
+      "type": "platformProcessing",
+      "required": true,
+      "title": "Platform Data Processing",
+      "description": "Allows ATLAS to store and process profile data needed for platform operation.",
+      "documentType": "processing_notice",
+      "url": "/gdpr",
+      "hash": "platform-processing-atlas-rodo-v2"
+    },
+    {
+      "type": "profileStorage",
+      "required": true,
+      "title": "Profile Storage",
+      "description": "Allows ATLAS to save your professional profile and onboarding progress.",
+      "documentType": "storage_notice",
+      "url": "/gdpr",
+      "hash": "profile-storage-atlas-rodo-v2"
+    },
+    {
+      "type": "documentProcessing",
+      "required": true,
+      "title": "Uploaded Document Processing",
+      "description": "Allows technical validation, private storage, preview and extraction of uploaded documents.",
+      "documentType": "document_processing_notice",
+      "url": "/gdpr",
+      "hash": "document-processing-atlas-rodo-v2"
+    },
+    {
+      "type": "aiCvAnalysis",
+      "required": false,
+      "title": "AI CV Analysis",
+      "description": "Allows structured analysis of your CV. Without it ATLAS uses only manual data and technical extraction.",
+      "documentType": "optional_ai_notice",
+      "url": "/gdpr",
+      "hash": "ai-cv-analysis-atlas-rodo-v2"
+    },
+    {
+      "type": "aiMatching",
+      "required": false,
+      "title": "AI Matching",
+      "description": "Allows your profile to be used for automated job matching.",
+      "documentType": "optional_matching_notice",
+      "url": "/gdpr",
+      "hash": "ai-matching-atlas-rodo-v2"
+    },
+    {
+      "type": "employerProfileShare",
+      "required": false,
+      "title": "Share Profile With Employer",
+      "description": "Allows sharing your profile with a specific employer after a separate decision.",
+      "documentType": "optional_share_notice",
+      "url": "/gdpr",
+      "hash": "employer-share-atlas-rodo-v2"
+    },
+    {
+      "type": "marketing",
+      "required": false,
+      "title": "Marketing Messages",
+      "description": "Allows ATLAS to send non-essential product and partner messages.",
+      "documentType": "marketing_notice",
+      "url": "/gdpr",
+      "hash": "marketing-atlas-rodo-v2"
+    },
+    {
+      "type": "personalizedRecommendations",
+      "required": false,
+      "title": "Personalized Recommendations",
+      "description": "Allows ATLAS to personalize recommendations beyond the core onboarding result.",
+      "documentType": "recommendation_notice",
+      "url": "/gdpr",
+      "hash": "recommendations-atlas-rodo-v2"
+    },
+    {
+      "type": "anonymousAnalytics",
+      "required": false,
+      "title": "Anonymous Service Improvement",
+      "description": "Allows use of anonymized data to improve ATLAS services.",
+      "documentType": "analytics_notice",
+      "url": "/gdpr",
+      "hash": "anonymous-analytics-atlas-rodo-v2"
+    }
+  ]
+}

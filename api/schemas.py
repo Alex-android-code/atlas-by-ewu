@@ -334,3 +334,19 @@ class ProfileSectionPayload(BaseModel):
 
 class ProfileRecordPayload(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ConsentCenterUpdate(BaseModel):
+    consents: dict[str, bool] = Field(default_factory=dict)
+    language: str = "uk"
+    source: str = "onboarding"
+
+
+class ConsentWithdrawRequest(BaseModel):
+    reason: str = ""
+
+
+class PrivacyRequestCreate(BaseModel):
+    request_type: str
+    contact: str = ""
+    note: str = ""

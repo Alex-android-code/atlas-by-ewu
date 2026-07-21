@@ -40,6 +40,8 @@ SESSION_COLLECTION = "onboarding_sessions"
 CV_JOB_COLLECTION = "cv_parse_jobs"
 DNA_COLLECTION = "professional_dna_scores"
 PROFILE_COMPLETENESS_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "profile_completeness.json"
+CONSENT_POLICY_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "consent_policies.json"
+DNA_SCORING_CONFIG = Path(__file__).resolve().parents[1] / "configs" / "professional_dna_scoring.json"
 
 
 @dataclass
@@ -136,6 +138,7 @@ class OnboardingWorkflowService:
             "model_identifier": "rule_based_local",
             "processing_time_ms": None,
             "extraction_errors": [],
+            "policy_guard": {"aiCvAnalysis": self.has_consent(user_id, "aiCvAnalysis"), "externalAiUsed": False},
             "delete_after": None,
             "created_at": now,
             "started_at": None,
@@ -362,9 +365,106 @@ class OnboardingWorkflowService:
             self._record_activity(user_id, "cv_parse_deleted_with_file", "cv")
         return changed
 
+    def consent_center(self, user_id: str) -> dict[str, Any]:
+        catalog = _consent_catalog()
+        current = self._current_consent_status(user_id)
+        return {
+            "policyVersion": catalog["policyVersion"],
+            "effectiveDate": catalog["effectiveDate"],
+            "required": [_consent_view(item, current.get(item["type"])) for item in catalog["policies"] if item["required"]],
+            "optional": [_consent_view(item, current.get(item["type"])) for item in catalog["policies"] if not item["required"]],
+            "canContinue": all(current.get(item["type"], {}).get("status") == "granted" for item in catalog["policies"] if item["required"]),
+        }
+
+    def save_consent_choices(self, user_id: str, choices: dict[str, bool], *, language: str = "uk", source: str = "onboarding") -> dict[str, Any]:
+        catalog = _consent_catalog()
+        policy_by_type = {item["type"]: item for item in catalog["policies"]}
+        missing = [item["type"] for item in catalog["policies"] if item["required"] and not choices.get(item["type"])]
+        if missing:
+            raise ValueError(f"Required consent is missing: {', '.join(missing)}")
+        result: dict[str, Any] = {}
+        tech_id = _tech_id(user_id)
+        for consent_type, policy in policy_by_type.items():
+            granted = bool(choices.get(consent_type, False))
+            consent = ConsentRecord(
+                subject_id=user_id,
+                consent_version=catalog["policyVersion"],
+                language=language,
+                source=source,
+                scopes=[consent_type],
+                accepted=granted,
+                revoked_at=None if granted else utc_now_iso(),
+                metadata={
+                    "consentType": consent_type,
+                    "status": "granted" if granted else "withdrawn",
+                    "required": policy["required"],
+                    "policy": policy,
+                    "technicalIdentifier": tech_id,
+                },
+            )
+            self.consents.add(consent)
+            result[consent_type] = consent.to_dict()
+            self._record_activity(user_id, "consent_granted" if granted else "consent_declined", consent_type)
+        session = self.get_or_start(user_id)
+        session["consents"] = result
+        session.setdefault("data", {})["consents"] = {**choices, "version": catalog["policyVersion"], "language": language}
+        session.setdefault("audit_log", []).append(_audit("consents_saved", "consents"))
+        session["updated_at"] = utc_now_iso()
+        self.database.update(SESSION_COLLECTION, user_id, session)
+        return {"status": "ok", "consents": result, "center": self.consent_center(user_id)}
+
+    def withdraw_consent(self, user_id: str, consent_type: str, *, reason: str = "") -> dict[str, Any]:
+        policy = next((item for item in _consent_catalog()["policies"] if item["type"] == consent_type), None)
+        if not policy:
+            raise ValueError("Unknown consent type")
+        consent = ConsentRecord(
+            subject_id=user_id,
+            consent_version=_consent_catalog()["policyVersion"],
+            language="uk",
+            source="api",
+            scopes=[consent_type],
+            accepted=False,
+            revoked_at=utc_now_iso(),
+            metadata={
+                "consentType": consent_type,
+                "status": "withdrawn",
+                "required": policy["required"],
+                "policy": policy,
+                "technicalIdentifier": _tech_id(user_id),
+                "reason": reason,
+                "consequence": _withdrawal_consequence(consent_type),
+            },
+        )
+        saved = self.consents.add(consent)
+        self._record_activity(user_id, "consent_withdrawn", consent_type)
+        return {"status": "ok", "consent": saved.to_dict(), "consequence": consent.metadata["consequence"]}
+
+    def consent_history(self, user_id: str) -> list[dict[str, Any]]:
+        return [item.to_dict() for item in self.consents.list() if item.subject_id == user_id]
+
+    def has_consent(self, user_id: str, consent_type: str) -> bool:
+        current = self._current_consent_status(user_id)
+        return current.get(consent_type, {}).get("status") == "granted"
+
+    def _current_consent_status(self, user_id: str) -> dict[str, dict[str, Any]]:
+        current: dict[str, dict[str, Any]] = {}
+        for item in sorted((entry for entry in self.consents.list() if entry.subject_id == user_id), key=lambda entry: entry.accepted_at):
+            consent_type = item.metadata.get("consentType") or (item.scopes[0] if item.scopes else "")
+            if not consent_type:
+                continue
+            current[consent_type] = {
+                "status": "granted" if item.accepted and not item.revoked_at else "withdrawn",
+                "required": bool(item.metadata.get("required")),
+                "policyVersion": item.consent_version,
+                "updatedAt": item.revoked_at or item.accepted_at,
+                "recordId": item.id,
+            }
+        return current
+
     def generate_dna(self, user_id: str) -> dict[str, Any]:
         session = self.get_or_start(user_id)
-        dna = _score_professional_dna(session.get("data", {}))
+        profile = self.agent_profiles.get_or_create_profile(user_id)
+        dna = _score_professional_dna(session.get("data", {}), profile.to_dict())
         session["professional_dna"] = dna
         session.setdefault("data", {})["professional_dna"] = dna
         session["current_step"] = "professional_dna"
@@ -372,12 +472,12 @@ class OnboardingWorkflowService:
         session.setdefault("audit_log", []).append(_audit("professional_dna_generated", "professional_dna"))
         self.database.update(SESSION_COLLECTION, user_id, session)
         self.database.update(DNA_COLLECTION, user_id, {"user_id": user_id, **dna})
-        profile = self.agent_profiles.get_or_create_profile(user_id)
         profile.profile_completeness = int(dna["profileCompleteness"])
-        profile.strengths = dna["strengths"]
-        profile.development_areas = dna["gaps"]
+        profile.strengths = [item["title"] for item in dna["strengths"]]
+        profile.development_areas = [item["title"] for item in dna["gaps"]]
         profile.metadata["professional_dna_v1"] = dna
         self.agent_profiles.profiles.update(profile)
+        self._record_activity(user_id, "professional_dna_generated", "professional_dna")
         return dna
 
     def get_dna(self, user_id: str) -> dict[str, Any]:
@@ -385,6 +485,20 @@ class OnboardingWorkflowService:
         if dna:
             return dna
         return self.generate_dna(user_id)
+
+    def dna_explanation(self, user_id: str) -> dict[str, Any]:
+        dna = self.get_dna(user_id)
+        return {
+            "overallScore": dna.get("overallScore"),
+            "components": dna.get("components", {}),
+            "strengths": dna.get("strengths", []),
+            "gaps": dna.get("gaps", []),
+            "recommendations": dna.get("recommendations", []),
+            "formula": dna.get("formula", {}),
+            "scoringConfigVersion": dna.get("scoringConfigVersion"),
+            "generatedAt": dna.get("generatedAt"),
+            "sourceSnapshotId": dna.get("sourceSnapshotId"),
+        }
 
     def complete(self, user_id: str) -> dict[str, Any]:
         session = self.get_or_start(user_id)
@@ -638,26 +752,20 @@ class OnboardingWorkflowService:
             self.agent_profiles.profiles.update(profile)
 
     def _store_consents(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        version = str(data.get("version") or "atlas-rodo-v1")
-        language = str(data.get("language") or "uk")
-        tech_id = _tech_id(user_id)
-        for key, required in {"terms": True, "privacy": True, "aiProcessing": True, "marketing": False, "analytics": False}.items():
-            accepted = bool(data.get(key))
-            if required and not accepted:
-                raise ValueError(f"Required consent is missing: {key}")
-            consent = ConsentRecord(
-                subject_id=user_id,
-                consent_version=version,
-                language=language,
-                source="agent_onboarding",
-                scopes=[key],
-                accepted=accepted,
-                metadata={"required": required, "technical_id": tech_id, "withdrawnAt": None},
-            )
-            self.consents.add(consent)
-            result[key] = consent.to_dict()
-        return result
+        choices = dict(data)
+        if choices.get("aiProcessing"):
+            choices.setdefault("aiCvAnalysis", True)
+            choices.setdefault("personalizedRecommendations", True)
+        if choices.get("analytics"):
+            choices.setdefault("anonymousAnalytics", True)
+        for required_type in ("platformProcessing", "profileStorage", "documentProcessing"):
+            choices.setdefault(required_type, bool(choices.get("terms") and choices.get("privacy")))
+        return self.save_consent_choices(
+            user_id,
+            choices,
+            language=str(data.get("language") or "uk"),
+            source="agent_onboarding",
+        )["consents"]
 
     def _ensure_document_record(self, user_id: str, file_data: dict[str, Any], document_type: str) -> None:
         if not file_data.get("id"):
@@ -903,59 +1011,54 @@ def _extract_basic_cv_fields(text: str) -> dict[str, Any]:
     return result
 
 
-def _score_professional_dna(data: dict[str, Any]) -> dict[str, Any]:
-    scores = {
-        "profileCompleteness": _completeness_score(data),
-        "experienceScore": _presence_score(data.get("experience", {}).get("records"), 14),
-        "skillsScore": _presence_score(data.get("profession", {}).get("skills"), 14),
-        "educationScore": _presence_score(data.get("education", {}).get("records"), 10),
-        "languagesScore": _presence_score(data.get("languages", {}).get("records"), 10),
-        "mobilityScore": _presence_score(data.get("preferences", {}).get("countries"), 8),
-        "documentReadinessScore": 10 if data.get("cv", {}).get("file") else 0,
-        "marketReadinessScore": _presence_score(data.get("preferences", {}).get("careerGoal"), 10),
+def _score_professional_dna(data: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    config = json.loads(DNA_SCORING_CONFIG.read_text(encoding="utf-8"))
+    weights = config["weights"]
+    completeness = _profile_completeness_from_data(data, profile)
+    experience = _experience_component(data, profile)
+    skills = _skills_component(data, profile)
+    education = _education_component(data, profile)
+    languages = _languages_component(data, profile)
+    mobility = _mobility_component(data, profile)
+    documents = _document_component(data, profile)
+    market = _market_component(data, profile)
+    components = {
+        "profileCompleteness": completeness,
+        "experienceScore": experience,
+        "skillsScore": skills,
+        "educationScore": education,
+        "languagesScore": languages,
+        "mobilityScore": mobility,
+        "documentReadinessScore": documents,
+        "marketReadinessScore": market,
     }
-    overall = min(100, round(sum(scores.values()) / 86 * 100))
-    strengths: list[str] = []
-    if scores["skillsScore"]:
-        strengths.append("Skills are declared and ready for normalization.")
-    if scores["documentReadinessScore"]:
-        strengths.append("CV is attached to the candidate profile.")
-    if scores["languagesScore"]:
-        strengths.append("Language profile includes CEFR readiness.")
-    gaps: list[str] = []
-    if not scores["experienceScore"]:
-        gaps.append("Add at least one work experience record.")
-    if not scores["educationScore"]:
-        gaps.append("Add education, courses, certificates, or licenses.")
-    if not scores["mobilityScore"]:
-        gaps.append("Set preferred countries and relocation model.")
-    actions = [
-        "Review parsed CV data before publishing the profile.",
-        "Attach certificates or licenses if they are required for the target country.",
-        "Keep GDPR/RODO consents current in the privacy center.",
-    ]
+    overall = round(sum((components[key] / 100) * weights[key] for key in weights))
+    strengths = _dna_strengths(components, data, profile)
+    gaps = _dna_gaps(components, data, profile)
+    recommendations = _dna_recommendations(gaps)
+    snapshot_id = hashlib.sha256(json.dumps({"data": data, "profile": profile}, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:16]
     return {
-        "overallScore": overall,
-        **scores,
-        "formula": {
-            "overallScore": "round(sum(component_scores) / 86 * 100)",
-            "maxComponentTotal": 86,
-            "components": {
-                "profileCompleteness": "completed core sections / 10 * 100",
-                "experienceScore": "14 when at least one experience record exists",
-                "skillsScore": "14 when skills exist",
-                "educationScore": "10 when education records exist",
-                "languagesScore": "10 when language records exist",
-                "mobilityScore": "8 when preferred countries exist",
-                "documentReadinessScore": "10 when CV is attached",
-                "marketReadinessScore": "10 when career goal exists",
-            },
-        },
-        "strengths": strengths or ["Profile foundation is created."],
-        "gaps": gaps,
-        "recommendedActions": actions,
-        "generatedAt": utc_now_iso(),
+        "id": new_id("DNA"),
+        "userId": profile.get("user_id") or "",
         "version": "professional_dna_v1_rule_based",
+        "overallScore": max(0, min(100, overall)),
+        **components,
+        "components": {
+            key: {"score": components[key], "weight": weights[key], "weightedContribution": round((components[key] / 100) * weights[key], 2)}
+            for key in weights
+        },
+        "strengths": strengths,
+        "gaps": gaps,
+        "recommendations": recommendations,
+        "recommendedActions": [item["title"] for item in recommendations],
+        "formula": {
+            "overallScore": "sum(component_score / 100 * component_weight)",
+            "weights": weights,
+            "note": "Profile completeness measures data fullness; Professional DNA measures readiness from confirmed profile data.",
+        },
+        "scoringConfigVersion": config["version"],
+        "generatedAt": utc_now_iso(),
+        "sourceSnapshotId": snapshot_id,
     }
 
 
@@ -977,6 +1080,162 @@ def _completeness_score(data: dict[str, Any]) -> int:
 
 def _presence_score(value: Any, max_score: int) -> int:
     return max_score if value else 0
+
+
+def _profile_completeness_from_data(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    checks = [
+        data.get("personal_data") or profile.get("contact_information"),
+        data.get("profession") or profile.get("professional_summary"),
+        data.get("profession", {}).get("skills") or profile.get("skills"),
+        data.get("experience", {}).get("records") or profile.get("work_experience"),
+        data.get("education", {}).get("records") or profile.get("education") or profile.get("certificates"),
+        data.get("languages", {}).get("records") or profile.get("languages"),
+        data.get("preferences") or profile.get("career_goals") or profile.get("relocation_preferences"),
+        data.get("profile_photo", {}).get("file") or profile.get("profile_photo"),
+        data.get("cv", {}).get("file") or profile.get("uploaded_cv"),
+    ]
+    return round(sum(1 for item in checks if item) / len(checks) * 100)
+
+
+def _experience_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    records = data.get("experience", {}).get("records") or profile.get("work_experience") or []
+    if not records:
+        return 0
+    score = 35
+    score += min(25, len(records) * 8)
+    if any(record.get("responsibilities") or record.get("note") or record.get("description") for record in records):
+        score += 20
+    if any(record.get("achievements") for record in records):
+        score += 10
+    if any(record.get("isCurrent") or not record.get("endDate") for record in records):
+        score += 10
+    return min(100, score)
+
+
+def _skills_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    skills = data.get("profession", {}).get("skills") or profile.get("skills") or []
+    if not skills:
+        return 0
+    count = len(skills)
+    verified = sum(1 for item in skills if isinstance(item, dict) and item.get("verified"))
+    return min(100, 25 + min(45, count * 10) + min(20, verified * 10) + (10 if data.get("profession", {}).get("profession") else 0))
+
+
+def _education_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    education = data.get("education", {}).get("records") or profile.get("education") or []
+    certificates = data.get("education", {}).get("certificates") or profile.get("certificates") or []
+    score = 0
+    if education:
+        score += 45
+    if certificates:
+        score += 35
+    if any((item.get("status") == "valid" or not item.get("expiresAt")) for item in certificates if isinstance(item, dict)):
+        score += 20
+    return min(100, score)
+
+
+def _languages_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    languages = data.get("languages", {}).get("records") or profile.get("languages") or []
+    if not languages:
+        return 0
+    high = sum(1 for item in languages if str(item.get("level") or item.get("organization") or "").upper() in {"B2", "C1", "C2", "NATIVE"})
+    return min(100, 35 + len(languages) * 20 + high * 10)
+
+
+def _mobility_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    preferences = data.get("preferences", {})
+    relocation = profile.get("relocation_preferences") or {}
+    score = 20 if preferences or relocation else 0
+    if preferences.get("countries") or relocation.get("readiness"):
+        score += 30
+    if preferences.get("format") in {"віддалено", "гібрид", "remote", "hybrid"} or preferences.get("relocationReadiness") in {"yes", "maybe"}:
+        score += 25
+    if preferences.get("startDate") or preferences.get("businessTravel") in {"yes", "limited"}:
+        score += 25
+    return min(100, score)
+
+
+def _document_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    score = 0
+    if data.get("cv", {}).get("file") or profile.get("uploaded_cv"):
+        score += 35
+    if data.get("profile_photo", {}).get("file") or profile.get("profile_photo"):
+        score += 20
+    certificates = data.get("education", {}).get("certificates") or profile.get("certificates") or []
+    if certificates:
+        score += 25
+    if any(item.get("status") == "expired" for item in certificates if isinstance(item, dict)):
+        score -= 20
+    return max(0, min(100, score))
+
+
+def _market_component(data: dict[str, Any], profile: dict[str, Any]) -> int:
+    preferences = data.get("preferences", {})
+    score = 0
+    if data.get("profession", {}).get("profession") or profile.get("professional_summary"):
+        score += 25
+    if data.get("profession", {}).get("skills") or profile.get("skills"):
+        score += 20
+    if preferences.get("countries"):
+        score += 15
+    if preferences.get("salaryExpectation") or preferences.get("minimumSalary") or profile.get("salary_expectations"):
+        score += 15
+    if preferences.get("startDate"):
+        score += 10
+    if data.get("cv", {}).get("file") or profile.get("uploaded_cv"):
+        score += 15
+    return min(100, score)
+
+
+def _insight(kind: str, title: str, description: str, component: str) -> dict[str, Any]:
+    return {"id": new_id("INS"), "type": kind, "title": title, "description": description, "component": component}
+
+
+def _dna_strengths(components: dict[str, int], data: dict[str, Any], profile: dict[str, Any]) -> list[dict[str, Any]]:
+    strengths: list[dict[str, Any]] = []
+    if components["profileCompleteness"] >= 80:
+        strengths.append(_insight("strength", "Повний профіль", "Ключові розділи профілю заповнені.", "profileCompleteness"))
+    if components["experienceScore"] >= 70:
+        strengths.append(_insight("strength", "Досвід описаний", "У профілі є записи досвіду з описом або поточною роллю.", "experienceScore"))
+    if components["skillsScore"] >= 70:
+        strengths.append(_insight("strength", "Навички готові до аналізу", "У профілі є достатньо навичок для базового зіставлення.", "skillsScore"))
+    if components["languagesScore"] >= 70:
+        strengths.append(_insight("strength", "Мовний профіль", "Вказано одну або кілька мов із рівнями.", "languagesScore"))
+    return strengths or [_insight("strength", "Профіль створено", "ATLAS має базову основу для подальшого заповнення.", "profileCompleteness")]
+
+
+def _dna_gaps(components: dict[str, int], data: dict[str, Any], profile: dict[str, Any]) -> list[dict[str, Any]]:
+    gaps: list[dict[str, Any]] = []
+    if components["documentReadinessScore"] < 50:
+        gaps.append(_insight("gap", "Додайте CV або документи", "Документальна готовність нижча за базовий рівень.", "documentReadinessScore"))
+    if components["experienceScore"] < 50:
+        gaps.append(_insight("gap", "Опишіть досвід", "Додайте хоча б один запис досвіду з обов'язками.", "experienceScore"))
+    if components["skillsScore"] < 50:
+        gaps.append(_insight("gap", "Додайте навички", "Навички потрібні для якісного профілю і рекомендацій.", "skillsScore"))
+    if components["marketReadinessScore"] < 60:
+        gaps.append(_insight("gap", "Уточніть побажання", "Вкажіть країни, зарплату або дату готовності почати.", "marketReadinessScore"))
+    return gaps
+
+
+def _dna_recommendations(gaps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    mapping = {
+        "documentReadinessScore": ("documents", "Додайте або оновіть CV", "Підвищить документальну готовність профілю.", "high", 10),
+        "experienceScore": ("experience", "Завершіть опис досвіду", "Додайте обов'язки та досягнення до останніх ролей.", "high", 12),
+        "skillsScore": ("skills", "Додайте навички", "Вкажіть ключові навички та рівень володіння.", "medium", 8),
+        "marketReadinessScore": ("preferences", "Уточніть кар'єрні побажання", "Додайте зарплату, країни та готовність почати.", "medium", 8),
+    }
+    recommendations = []
+    for gap in gaps[:5]:
+        category, title, description, priority, impact = mapping.get(gap["component"], ("profile", gap["title"], gap["description"], "low", 3))
+        recommendations.append({
+            "id": new_id("REC"),
+            "category": category,
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "estimatedScoreImpact": impact,
+        })
+    return recommendations
 
 
 def _field(value: Any, source_text: str | None, confidence: float) -> dict[str, Any]:
@@ -1300,6 +1559,39 @@ def _profile_completeness(profile: Any, session: dict[str, Any]) -> dict[str, An
     missing = [key for key, complete in checks.items() if not complete]
     next_best = max(missing, key=lambda key: weights.get(key, 0), default=None)
     return {"percent": int(percent), "weights": weights, "missing_sections": missing, "next_best_section": next_best}
+
+
+def _consent_catalog() -> dict[str, Any]:
+    return json.loads(CONSENT_POLICY_CONFIG.read_text(encoding="utf-8"))
+
+
+def _consent_view(policy: dict[str, Any], status: dict[str, Any] | None) -> dict[str, Any]:
+    status = status or {}
+    return {
+        "type": policy["type"],
+        "title": policy["title"],
+        "description": policy["description"],
+        "required": policy["required"],
+        "detailsUrl": policy["url"],
+        "policyVersion": status.get("policyVersion") or _consent_catalog()["policyVersion"],
+        "effectiveDate": _consent_catalog()["effectiveDate"],
+        "documentType": policy["documentType"],
+        "hash": policy["hash"],
+        "status": status.get("status", "withdrawn"),
+        "selected": status.get("status") == "granted",
+    }
+
+
+def _withdrawal_consequence(consent_type: str) -> str:
+    consequences = {
+        "aiMatching": "New automated matching jobs will not be started.",
+        "aiCvAnalysis": "External AI CV analysis will remain disabled; technical extraction may still work if required consent exists.",
+        "marketing": "Marketing messages must not be sent.",
+        "employerProfileShare": "Profile sharing with employers requires a new separate permission.",
+        "personalizedRecommendations": "Only core onboarding recommendations remain available.",
+        "anonymousAnalytics": "Anonymized analytics for service improvement are disabled.",
+    }
+    return consequences.get(consent_type, "Related optional processing is disabled. Required processing may be needed for platform operation.")
 
 
 def _confidence_number(value: Any) -> float:

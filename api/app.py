@@ -45,7 +45,9 @@ from api.schemas import (
     AgentOnboardingComplete,
     AnalyticsEventCreate,
     CandidateCreate,
+    ConsentCenterUpdate,
     ConsentCreate,
+    ConsentWithdrawRequest,
     CountryCreate,
     CountryStatusUpdate,
     CountryUpdate,
@@ -74,6 +76,7 @@ from api.schemas import (
     OnboardingStepPatch,
     ProfileRecordPayload,
     ProfileSectionPayload,
+    PrivacyRequestCreate,
     SkillGapAnalysisRequest,
     StatusUpdate,
     TargetCompetencyRequirement,
@@ -779,6 +782,52 @@ def complete_onboarding_workflow(request: Request) -> dict:
     return result
 
 
+@app.get("/api/consents")
+def get_consents(request: Request) -> dict:
+    return get_onboarding_workflow_service().consent_center(_onboarding_owner_id(request))
+
+
+@app.post("/api/consents")
+def save_consents(payload: ConsentCenterUpdate, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().save_consent_choices(
+            _onboarding_owner_id(request),
+            payload.consents,
+            language=payload.language,
+            source=payload.source,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/consents/{consent_type}/withdraw")
+def withdraw_consent(consent_type: str, payload: ConsentWithdrawRequest, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().withdraw_consent(_onboarding_owner_id(request), consent_type, reason=payload.reason)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/consents/history")
+def consent_history(request: Request) -> dict:
+    return {"history": get_onboarding_workflow_service().consent_history(_onboarding_owner_id(request))}
+
+
+@app.post("/api/privacy/requests")
+def create_privacy_request(payload: PrivacyRequestCreate, request: Request) -> dict:
+    try:
+        subject_id = _onboarding_owner_id(request)
+        data_request = get_rodo_service().create_data_subject_request(
+            subject_id=subject_id,
+            request_type=payload.request_type,
+            contact=payload.contact or subject_id,
+            note=payload.note,
+        )
+        return {"status": "ok", "request": data_request.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @app.get("/api/profile")
 def get_profile(request: Request) -> dict:
     return get_onboarding_workflow_service().profile(_onboarding_owner_id(request))
@@ -967,6 +1016,11 @@ def generate_professional_dna(request: Request) -> dict:
 @app.get("/api/professional-dna")
 def get_professional_dna(request: Request) -> dict:
     return get_onboarding_workflow_service().get_dna(_onboarding_owner_id(request))
+
+
+@app.get("/api/professional-dna/explanation")
+def get_professional_dna_explanation(request: Request) -> dict:
+    return get_onboarding_workflow_service().dna_explanation(_onboarding_owner_id(request))
 
 
 @app.get("/api/agent/dashboard/{user_id}")

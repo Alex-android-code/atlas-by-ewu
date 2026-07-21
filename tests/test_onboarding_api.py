@@ -223,6 +223,69 @@ class OnboardingApiTests(unittest.TestCase):
         self.assertIn("completeness", profile.json())
         self.assertIn("missing_sections", profile.json()["completeness"])
 
+    def test_consent_api_and_professional_dna_explanation(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+
+        center = self.client.get("/api/consents", headers=headers)
+        self.assertEqual(center.status_code, 200)
+        self.assertEqual(center.json()["policyVersion"], "atlas-rodo-v2")
+        self.assertFalse(center.json()["canContinue"])
+        self.assertEqual(len(center.json()["required"]), 5)
+
+        missing = self.client.post("/api/consents", headers=headers, json={"consents": {"terms": True}})
+        self.assertEqual(missing.status_code, 400)
+
+        saved = self.client.post(
+            "/api/consents",
+            headers=headers,
+            json={
+                "consents": {
+                    "terms": True,
+                    "privacy": True,
+                    "platformProcessing": True,
+                    "profileStorage": True,
+                    "documentProcessing": True,
+                    "aiCvAnalysis": False,
+                    "aiMatching": True,
+                    "marketing": False,
+                },
+                "language": "uk",
+                "source": "dashboard",
+            },
+        )
+        self.assertEqual(saved.status_code, 200)
+        optional = {item["type"]: item for item in saved.json()["center"]["optional"]}
+        self.assertFalse(optional["aiCvAnalysis"]["selected"])
+        self.assertTrue(optional["aiMatching"]["selected"])
+
+        withdrawn = self.client.post("/api/consents/aiMatching/withdraw", headers=headers, json={"reason": "pause matching"})
+        self.assertEqual(withdrawn.status_code, 200)
+        self.assertIn("matching", withdrawn.json()["consequence"].lower())
+        history = self.client.get("/api/consents/history", headers=headers)
+        self.assertGreaterEqual(len(history.json()["history"]), 12)
+
+        dna = self.client.post("/api/professional-dna/generate", headers=headers)
+        self.assertEqual(dna.status_code, 200)
+        explanation = self.client.get("/api/professional-dna/explanation", headers=headers)
+        self.assertEqual(explanation.status_code, 200)
+        self.assertIn("formula", explanation.json())
+        self.assertEqual(sum(explanation.json()["formula"]["weights"].values()), 100)
+
+    def test_privacy_request_api_creates_rodo_foundation_record(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+
+        created = self.client.post(
+            "/api/privacy/requests",
+            headers=headers,
+            json={"request_type": "data_export", "contact": "worker@example.com", "note": "Need a copy"},
+        )
+
+        self.assertEqual(created.status_code, 200)
+        self.assertEqual(created.json()["request"]["request_type"], "export")
+        self.assertEqual(created.json()["request"]["status"], "requested")
+
 
 if __name__ == "__main__":
     unittest.main()

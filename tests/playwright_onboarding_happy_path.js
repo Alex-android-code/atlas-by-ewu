@@ -107,9 +107,8 @@ async function dropVirtualFile(page, selector, name, mimeType, content) {
   await page.selectOption('[data-path="preferences.salaryPeriod"]', "month");
   await next(page);
 
-  await page.check('[data-path="consents.terms"]');
-  await page.check('[data-path="consents.privacy"]');
-  await page.check('[data-path="consents.aiProcessing"]');
+  await page.click('[data-action="accept-required-consents"]');
+  await page.check('[data-path="consents.aiCvAnalysis"]');
   await next(page);
 
   await page.click('[data-action="generate-dna"]');
