@@ -73,15 +73,19 @@ class OnboardingApiTests(unittest.TestCase):
 
         parsed = self.client.post(f"/api/cv/{cv_file['id']}/parse", headers=headers)
         self.assertEqual(parsed.status_code, 200)
-        self.assertEqual(parsed.json()["status"], "completed")
+        self.assertEqual(parsed.json()["status"], "queued")
+        job = self.client.get(f"/api/cv/parse-jobs/{parsed.json()['id']}", headers=headers)
+        self.assertEqual(job.json()["status"], "awaiting_review")
+        result = self.client.get(f"/api/cv/parse-jobs/{parsed.json()['id']}/result", headers=headers)
+        self.assertEqual(result.status_code, 200)
 
         self.client.post(
-            "/api/cv/parse-jobs/accept",
+            f"/api/cv/parse-jobs/{parsed.json()['id']}/confirm",
             headers=headers,
             json={
-                "action": "accept_selected",
-                "job_id": parsed.json()["id"],
-                "accepted": {"email": {"value": "worker@example.com", "source": "user_confirmed_cv_review"}},
+                "acceptedFields": {"email": {"value": "worker@example.com", "sourceText": "worker@example.com"}},
+                "editedFields": {},
+                "rejectedFields": [],
             },
         )
         self.client.patch(
@@ -133,6 +137,24 @@ class OnboardingApiTests(unittest.TestCase):
         self.assertTrue(rejected.json()["data"]["cv"]["parse_rejected"])
         job = self.client.get(f"/api/cv/parse-jobs/{parsed['id']}", headers=headers)
         self.assertEqual(job.json()["status"], "rejected")
+
+    def test_cv_parse_job_is_owner_scoped(self) -> None:
+        registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})
+        owner_headers = {"X-ATLAS-User-Id": registered.json()["user_id"]}
+        other_headers = {"X-ATLAS-User-Id": "other-user"}
+        cv = self.client.post(
+            "/api/files/upload",
+            headers=owner_headers,
+            data={"kind": "cv"},
+            files={"file": ("cv.rtf", b"{\\rtf1 Owner owner@example.com}", "application/rtf")},
+        )
+        cv_file = cv.json()["file"]
+        self.client.patch("/api/onboarding", headers=owner_headers, json={"step": "cv", "data": {"file": cv_file}})
+        parsed = self.client.post(f"/api/cv/{cv_file['id']}/parse", headers=owner_headers).json()
+
+        foreign = self.client.get(f"/api/cv/parse-jobs/{parsed['id']}", headers=other_headers)
+
+        self.assertEqual(foreign.status_code, 404)
 
     def test_universal_file_api_delete_and_signed_download(self) -> None:
         registered = self.client.post("/api/auth/register", json={"preferred_language": "uk"})

@@ -7,7 +7,7 @@ import secrets
 from pathlib import Path
 from time import time
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -61,6 +61,7 @@ from api.schemas import (
     CorporatePositionCreate,
     CustomerSubscriptionSet,
     CvParseAccept,
+    CvParseConfirm,
     DevelopmentPlanCreate,
     DevelopmentRecommendationCreate,
     DynamicInterviewAnswer,
@@ -812,11 +813,13 @@ def delete_universal_file(file_id: str, request: Request, kind: str | None = Non
 
 
 @app.post("/api/cv/{file_id}/parse")
-def parse_cv_file(file_id: str, request: Request) -> dict:
+def parse_cv_file(file_id: str, request: Request, background_tasks: BackgroundTasks) -> dict:
     owner_id = _onboarding_owner_id(request)
     try:
         file_path = ONBOARDING_FILE_STORAGE.path_for(file_id, owner_id)
-        return get_onboarding_workflow_service().parse_cv(owner_id, file_id, file_path=file_path)
+        job = get_onboarding_workflow_service().start_cv_parse_job(owner_id, file_id)
+        background_tasks.add_task(get_onboarding_workflow_service().process_cv_parse_job, owner_id, job["id"], file_path)
+        return job
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="CV file not found") from error
     except ValueError as error:
@@ -831,14 +834,63 @@ def get_cv_parse_job(job_id: str, request: Request) -> dict:
         raise HTTPException(status_code=404, detail=str(error)) from error
 
 
+@app.get("/api/cv/parse-jobs/{job_id}/result")
+def get_cv_parse_job_result(job_id: str, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().get_parse_result(_onboarding_owner_id(request), job_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/cv/parse-jobs/{job_id}/confirm")
+def confirm_cv_parse_job(job_id: str, payload: CvParseConfirm, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().confirm_cv_parse(
+            _onboarding_owner_id(request),
+            job_id,
+            accepted_fields=payload.acceptedFields,
+            edited_fields=payload.editedFields,
+            rejected_fields=payload.rejectedFields,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/cv/parse-jobs/{job_id}/reject")
+def reject_cv_parse_job(job_id: str, request: Request) -> dict:
+    try:
+        return get_onboarding_workflow_service().reject_cv_parse(_onboarding_owner_id(request), job_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/cv/parse-jobs/{job_id}/retry")
+def retry_cv_parse_job(job_id: str, request: Request, background_tasks: BackgroundTasks) -> dict:
+    owner_id = _onboarding_owner_id(request)
+    try:
+        job = get_onboarding_workflow_service().retry_cv_parse(owner_id, job_id)
+        file_path = ONBOARDING_FILE_STORAGE.path_for(job["file_id"], owner_id)
+        background_tasks.add_task(get_onboarding_workflow_service().process_cv_parse_job, owner_id, job["id"], file_path)
+        return job
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="CV file not found") from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
 @app.post("/api/cv/parse-jobs/accept")
 def accept_cv_parse(payload: CvParseAccept, request: Request) -> dict:
     try:
-        return get_onboarding_workflow_service().accept_cv_parse(
-            _onboarding_owner_id(request),
-            payload.accepted,
+        owner_id = _onboarding_owner_id(request)
+        if payload.action == "reject":
+            return get_onboarding_workflow_service().reject_cv_parse(owner_id, payload.job_id)
+        return get_onboarding_workflow_service().confirm_cv_parse(
+            owner_id,
+            payload.job_id,
+            accepted_fields=payload.accepted,
+            edited_fields={},
+            rejected_fields=[],
             action=payload.action,
-            job_id=payload.job_id,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -1500,11 +1552,14 @@ def _delete_onboarding_file(request: Request, file_id: str, kind: str | None) ->
     owner_id = _onboarding_owner_id(request)
     try:
         ONBOARDING_FILE_STORAGE.delete(file_id, owner_id, kind=kind)
+        anonymized = 0
+        if kind in {"cv", "document", None}:
+            anonymized = get_onboarding_workflow_service().anonymize_parse_results_for_file(owner_id, file_id)
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="File not found") from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"success": True, "deleted": file_id}
+    return {"success": True, "deleted": file_id, "anonymized_parse_results": anonymized}
 
 
 def _set_user_cookie(response: Response, request: Request, user_id: str) -> None:
@@ -1520,9 +1575,9 @@ def _set_user_cookie(response: Response, request: Request, user_id: str) -> None
 
 def _onboarding_owner_id(request: Request, allow_anonymous: bool = True) -> str:
     candidate = (
-        request.cookies.get("atlas_user_id")
-        or request.headers.get("x-atlas-user-id")
+        request.headers.get("x-atlas-user-id")
         or request.headers.get("x-forwarded-user")
+        or request.cookies.get("atlas_user_id")
     )
     if candidate:
         return "".join(char for char in candidate if char.isalnum() or char in ("-", "_"))[:96] or "anonymous"

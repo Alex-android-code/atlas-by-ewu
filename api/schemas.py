@@ -320,3 +320,9 @@ class CvParseAccept(BaseModel):
     accepted: dict[str, Any] = Field(default_factory=dict)
     action: str = "accept_selected"
     job_id: str | None = None
+
+
+class CvParseConfirm(BaseModel):
+    acceptedFields: dict[str, Any] = Field(default_factory=dict)
+    editedFields: dict[str, Any] = Field(default_factory=dict)
+    rejectedFields: list[str] = Field(default_factory=list)

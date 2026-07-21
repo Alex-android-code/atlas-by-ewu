@@ -306,6 +306,7 @@ AGENT_ONBOARDING_HTML = r"""
           <p>AI не записує дані в профіль автоматично. Спочатку перегляньте витягнуті поля, відредагуйте або відхиліть.</p>
           <div class="actions">
             <button class="secondary" data-action="parse-cv" type="button">Проаналізувати CV</button>
+            <button class="secondary" data-action="retry-cv" type="button">Повторити аналіз</button>
             <button class="secondary" data-action="accept-all-cv" type="button">Прийняти всі поля</button>
             <button class="secondary" data-action="accept-cv" type="button">Прийняти вибрані</button>
             <button class="danger" data-action="reject-cv" type="button">Відхилити витягнуті дані</button>
@@ -356,6 +357,7 @@ AGENT_ONBOARDING_HTML = r"""
       });
       document.querySelectorAll("[data-universal-upload]").forEach(bindUniversalUpload);
       document.querySelector("[data-action='parse-cv']")?.addEventListener("click", parseCv);
+      document.querySelector("[data-action='retry-cv']")?.addEventListener("click", retryCv);
       document.querySelector("[data-action='accept-all-cv']")?.addEventListener("click", acceptAllCv);
       document.querySelector("[data-action='accept-cv']")?.addEventListener("click", acceptCv);
       document.querySelector("[data-action='reject-cv']")?.addEventListener("click", rejectCv);
@@ -534,9 +536,22 @@ AGENT_ONBOARDING_HTML = r"""
       if (!file?.id) return fail("Спочатку завантажте CV.");
       await api("/api/onboarding", {method: "PATCH", body: JSON.stringify({step: "cv", data: local.cv}), headers});
       const job = await api(`/api/cv/${encodeURIComponent(file.id)}/parse`, {method: "POST", headers: {"X-ATLAS-User-Id": userId}});
-      session.parsed_cv = {job_id: job.id, status: job.status, result: job.result};
-      selectedParsed = job.result;
+      session.parsed_cv = {job_id: job.id, status: job.status, progress: job.progress || 5, result: job.result};
+      selectedParsed = {};
       render();
+      await pollCvJob(job.id);
+    }
+
+    async function pollCvJob(jobId) {
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const job = await api(`/api/cv/parse-jobs/${encodeURIComponent(jobId)}`, {headers: {"X-ATLAS-User-Id": userId}});
+        session.parsed_cv = {job_id: job.id, status: job.status, progress: job.progress || 0, result: job.result};
+        if (job.result) selectedParsed = job.result;
+        render();
+        if (["awaiting_review","confirmed","rejected","failed_extraction","failed_parsing"].includes(job.status)) return job;
+        await new Promise((resolve) => setTimeout(resolve, 450));
+      }
+      return session.parsed_cv;
     }
 
     async function acceptCv() {
@@ -548,7 +563,7 @@ AGENT_ONBOARDING_HTML = r"""
       session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_selected", accepted_fields: Object.keys(selectedParsed)}};
       pendingCvDecision = true;
       nextButton.disabled = true;
-      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed, action: "accept_selected", job_id: jobId}), headers}).finally(() => {
+      await api(`/api/cv/parse-jobs/${encodeURIComponent(jobId)}/confirm`, {method: "POST", body: JSON.stringify({acceptedFields: selectedParsed, editedFields: collectEditedCvFields(), rejectedFields: collectRejectedCvFields()}), headers}).finally(() => {
         pendingCvDecision = false;
         nextButton.disabled = false;
       });
@@ -567,7 +582,7 @@ AGENT_ONBOARDING_HTML = r"""
       session.parsed_cv = {...(session.parsed_cv || {}), status: "accepted", decision: {action: "accept_all", accepted_fields: Object.keys(selectedParsed)}};
       pendingCvDecision = true;
       nextButton.disabled = true;
-      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed, action: "accept_all", job_id: jobId}), headers}).finally(() => {
+      await api(`/api/cv/parse-jobs/${encodeURIComponent(jobId)}/confirm`, {method: "POST", body: JSON.stringify({acceptedFields: selectedParsed, editedFields: collectEditedCvFields(), rejectedFields: collectRejectedCvFields()}), headers}).finally(() => {
         pendingCvDecision = false;
         nextButton.disabled = false;
       });
@@ -585,7 +600,7 @@ AGENT_ONBOARDING_HTML = r"""
       session.parsed_cv = {...(session.parsed_cv || {}), status: "rejected", decision: {action: "reject", accepted_fields: []}};
       pendingCvDecision = true;
       nextButton.disabled = true;
-      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: {}, action: "reject", job_id: jobId}), headers}).finally(() => {
+      await api(`/api/cv/parse-jobs/${encodeURIComponent(jobId)}/reject`, {method: "POST", headers}).finally(() => {
         pendingCvDecision = false;
         nextButton.disabled = false;
       });
@@ -594,6 +609,16 @@ AGENT_ONBOARDING_HTML = r"""
       setPath("cv.parse_rejected", true);
       selectedParsed = {};
       fail("Витягнуті дані відхилено. У профіль нічого не записано.");
+    }
+
+    async function retryCv() {
+      const jobId = session?.parsed_cv?.job_id;
+      if (!jobId) return parseCv();
+      const job = await api(`/api/cv/parse-jobs/${encodeURIComponent(jobId)}/retry`, {method: "POST", headers});
+      session.parsed_cv = {job_id: job.id, status: job.status, progress: job.progress || 5, result: null};
+      selectedParsed = {};
+      render();
+      await pollCvJob(job.id);
     }
 
     async function generateDna() {
@@ -699,21 +724,48 @@ AGENT_ONBOARDING_HTML = r"""
 
     function cvReviewTemplate() {
       const parsedData = session?.parsed_cv?.result;
-      if (!parsedData) return `<p class="small">Після аналізу тут з'являться поля з confidence і source.</p>`;
-      const metaKeys = ["source","warnings","confidence","notFoundFields","parser"];
-      const status = session?.parsed_cv?.status || "completed";
-      const statusBlock = `<div class="card"><div class="chips"><span class="chip">CV job: ${escapeHtml(status)}</span><span class="chip">${escapeHtml(parsedData.parser?.version || "cv_rule_based_v1")}</span></div><p class="small">${escapeHtml((parsedData.warnings || []).join(" "))}</p>${(parsedData.notFoundFields || []).length ? `<p class="small">Not found: ${escapeHtml(parsedData.notFoundFields.join(", "))}</p>` : ""}</div>`;
-      return `${statusBlock}<div class="grid">${Object.entries(parsedData).filter(([key]) => !metaKeys.includes(key)).map(([key, value]) => {
-        const shown = typeof value === "object" && value !== null && "value" in value ? value.value : value;
-        const confidence = typeof value === "object" && value !== null ? value.confidence || parsedData.confidence : parsedData.confidence;
-        const textValue = Array.isArray(shown) ? shown.join(", ") : (typeof shown === "object" ? JSON.stringify(shown ?? "") : String(shown ?? ""));
-        const hasValue = textValue.trim().length > 0 && textValue !== "[]";
-        return `<div class="card">
-          <label class="consent-row"><input type="checkbox" data-cv-select="${escapeHtml(key)}" ${hasValue ? "checked" : ""}><span><strong>${escapeHtml(key)}</strong></span></label>
-          <textarea data-cv-field="${escapeHtml(key)}">${escapeHtml(textValue)}</textarea>
-          <div class="chips"><span class="chip">${escapeHtml(confidence || "low")}</span><span class="chip">${escapeHtml(value?.source || parsedData.source?.fileName || "cv")}</span></div>
-        </div>`;
-      }).join("")}</div>`;
+      const job = session?.parsed_cv || {};
+      if (!parsedData) return `<div class="card"><div class="chips"><span class="chip">${escapeHtml(cvStatusLabel(job.status || "uploaded"))}</span><span class="chip">${job.progress || 0}%</span></div><p class="small">Після завершення аналізу тут з'являться знайдені поля.</p></div>`;
+      const statusBlock = `<div class="card"><div class="chips"><span class="chip">${escapeHtml(cvStatusLabel(job.status || "awaiting_review"))}</span><span class="chip">${escapeHtml(parsedData.parser?.version || "cv_rule_based_v2")}</span></div><p class="small">${escapeHtml((parsedData.warnings || []).join(" "))}</p>${(parsedData.notFoundFields || []).length ? `<p class="small">Потрібно додати вручну: ${escapeHtml(parsedData.notFoundFields.join(", "))}</p>` : ""}</div>`;
+      return `${statusBlock}
+        ${cvSection("Контактні дані", ["fullName","email","phone","location","headline","summary"], parsedData)}
+        ${cvListSection("Професії", "professions", parsedData.professions || [])}
+        ${cvRecordSection("Досвід роботи", "workExperience", parsedData.workExperience || [])}
+        ${cvRecordSection("Освіта", "education", parsedData.education || [])}
+        ${cvRecordSection("Сертифікати", "certificates", parsedData.certificates || [])}
+        ${cvListSection("Навички", "skills", parsedData.skills || [])}
+        ${cvRecordSection("Мови", "languages", parsedData.languages || [])}`;
+    }
+
+    function cvSection(title, keys, parsedData) {
+      return `<h3>${title}</h3><div class="grid">${keys.map((key) => cvFieldCard(key, parsedData[key])).join("")}</div>`;
+    }
+
+    function cvListSection(title, key, items) {
+      const text = items.map((item) => item.value || "").filter(Boolean).join(", ");
+      const confidence = items.length ? Math.max(...items.map((item) => Number(item.confidence || 0))) : 0;
+      const sourceText = items.map((item) => item.sourceText || "").filter(Boolean).slice(0, 2).join(" | ");
+      return `<h3>${title}</h3><div class="grid">${cvFieldCard(key, {value: text, confidence, sourceText, selected: Boolean(text)})}</div>`;
+    }
+
+    function cvRecordSection(title, key, items) {
+      const text = items.map((item) => item.title || item.name || item.summary || item.value || JSON.stringify(item)).filter(Boolean).join("\n");
+      const confidence = items.length ? Math.max(...items.map((item) => Number(item.confidence || 0))) : 0;
+      const sourceText = items.map((item) => item.sourceText || "").filter(Boolean).slice(0, 2).join(" | ");
+      return `<h3>${title}</h3><div class="grid">${cvFieldCard(key, {value: text, confidence, sourceText, selected: Boolean(text)})}</div>`;
+    }
+
+    function cvFieldCard(key, value = {}) {
+      const rawValue = value && typeof value === "object" && "value" in value ? value.value : value;
+      const textValue = Array.isArray(rawValue) ? rawValue.join(", ") : String(rawValue ?? "");
+      const hasValue = textValue.trim().length > 0 && textValue !== "null";
+      const confidence = Number(value?.confidence || 0);
+      return `<div class="card">
+        <label class="consent-row"><input type="checkbox" data-cv-select="${escapeHtml(key)}" ${hasValue && value?.selected !== false ? "checked" : ""}><span><strong>${escapeHtml(cvFieldLabel(key))}</strong></span></label>
+        <textarea data-cv-field="${escapeHtml(key)}" data-cv-original="${escapeHtml(textValue)}">${escapeHtml(textValue)}</textarea>
+        <div class="chips"><span class="chip">${escapeHtml(confidenceLabel(confidence))}</span>${confidence < 0.7 ? `<span class="chip">Потребує перевірки</span>` : ""}</div>
+        ${value?.sourceText ? `<p class="small">${escapeHtml(value.sourceText)}</p>` : ""}
+      </div>`;
     }
 
     function collectSelectedCvFields() {
@@ -736,13 +788,67 @@ AGENT_ONBOARDING_HTML = r"""
       return result;
     }
 
-    function cvFieldValue(key, value) {
+    function collectEditedCvFields() {
+      const result = {};
+      document.querySelectorAll("[data-cv-field]").forEach((field) => {
+        const key = field.dataset.cvField;
+        const value = field.value.trim();
+        if (value && value !== (field.dataset.cvOriginal || "")) result[key] = cvFieldValue(key, value, true);
+      });
+      return result;
+    }
+
+    function collectRejectedCvFields() {
+      return [...document.querySelectorAll("[data-cv-select]:not(:checked)")].map((checkbox) => checkbox.dataset.cvSelect);
+    }
+
+    function cvFieldValue(key, value, edited = false) {
       const parsedData = session?.parsed_cv?.result || {};
       const original = parsedData[key];
       if (["skills", "professions"].includes(key)) {
-        return {value: splitList(value), source: "user_confirmed_cv_review", confidence: original?.confidence || "medium"};
+        return {value: splitList(value), sourceText: "user_confirmed_cv_review", confidence: Number(original?.confidence || 1), selected: true, edited};
       }
-      return {value, source: "user_confirmed_cv_review", confidence: original?.confidence || "medium"};
+      if (["workExperience", "education", "certificates", "languages"].includes(key)) {
+        return {value: value.split(/\n|;/).map((item) => item.trim()).filter(Boolean), sourceText: "user_confirmed_cv_review", confidence: Number(original?.confidence || 1), selected: true, edited};
+      }
+      return {value, sourceText: "user_confirmed_cv_review", confidence: Number(original?.confidence || 1), selected: true, edited};
+    }
+
+    function confidenceLabel(score) {
+      if (score >= 0.85) return "Висока впевненість";
+      if (score >= 0.7) return "Середня впевненість";
+      return "Потребує перевірки";
+    }
+
+    function cvStatusLabel(status) {
+      return ({
+        uploaded: "CV завантажено",
+        queued: "Очікує обробки",
+        extracting_text: "Читання документа",
+        parsing: "Структурування даних",
+        awaiting_review: "Очікує підтвердження",
+        confirmed: "Підтверджено",
+        rejected: "Відхилено",
+        failed_extraction: "Не вдалося прочитати документ",
+        failed_parsing: "Не вдалося структурувати дані"
+      })[status] || "Обробка CV";
+    }
+
+    function cvFieldLabel(key) {
+      return ({
+        fullName: "Повне ім'я",
+        email: "Email",
+        phone: "Телефон",
+        location: "Локація",
+        headline: "Професійний заголовок",
+        summary: "Резюме",
+        professions: "Професії",
+        skills: "Навички",
+        workExperience: "Досвід роботи",
+        education: "Освіта",
+        certificates: "Сертифікати",
+        languages: "Мови"
+      })[key] || key;
     }
 
     function dnaTemplate() {

@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 from database.json_database import JsonDatabase
@@ -60,9 +61,9 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
 
         job = self.service.parse_cv("user-1", "ONB-CV")
 
-        self.assertEqual(job["status"], "completed")
-        self.assertEqual(job["result"]["fullName"]["value"], "")
-        self.assertEqual(job["result"]["confidence"], "low")
+        self.assertEqual(job["status"], "awaiting_review")
+        self.assertIsNone(job["result"]["fullName"]["value"])
+        self.assertEqual(job["result"]["confidence"], 0)
         self.assertIn("only facts", job["result"]["warnings"][0])
         self.assertIn("parser", job["result"])
         self.assertIn("fullName", job["result"]["notFoundFields"])
@@ -89,7 +90,7 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         self.assertEqual(profile.contact_information["email"], "worker@example.com")
         self.assertEqual(profile.skills, ["Python", "Logistics"])
         self.assertNotIn("summary", saved["data"]["cv"]["accepted_parsed_data"])
-        self.assertEqual(reloaded_job["status"], "accepted")
+        self.assertEqual(reloaded_job["status"], "confirmed")
 
     def test_rejecting_cv_parse_persists_decision_without_profile_sync(self) -> None:
         file_data = {"id": "ONB-CV", "original_name": "cv.pdf", "stored_name": "ONB-CV.pdf"}
@@ -104,6 +105,46 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         self.assertEqual(saved["data"]["cv"]["accepted_parsed_data"], {})
         self.assertEqual(profile.contact_information.get("email"), None)
         self.assertEqual(reloaded_job["status"], "rejected")
+
+    def test_docx_cv_extraction_populates_review_fields(self) -> None:
+        cv_path = Path(self.tmpdir.name) / "cv.docx"
+        with zipfile.ZipFile(cv_path, "w") as archive:
+            archive.writestr(
+                "word/document.xml",
+                "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p>Olena Worker</w:p><w:p>Email: olena@example.com</w:p><w:p>Skills: Python, Logistics</w:p></w:body></w:document>",
+            )
+        file_data = {"id": "ONB-DOCX", "original_name": "cv.docx", "stored_name": "ONB-DOCX.docx"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+
+        job = self.service.parse_cv("user-1", "ONB-DOCX", cv_path)
+
+        self.assertEqual(job["status"], "awaiting_review")
+        self.assertEqual(job["result"]["email"]["value"], "olena@example.com")
+        self.assertEqual(job["result"]["skills"][0]["value"], "Python")
+
+    def test_scanned_pdf_falls_back_to_ocr_without_inventing_data(self) -> None:
+        cv_path = Path(self.tmpdir.name) / "scan.pdf"
+        cv_path.write_bytes(b"%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF")
+        file_data = {"id": "ONB-SCAN", "original_name": "scan.pdf", "stored_name": "ONB-SCAN.pdf"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+
+        job = self.service.parse_cv("user-1", "ONB-SCAN", cv_path)
+
+        self.assertEqual(job["status"], "awaiting_review")
+        self.assertIn("native_pdf_text_empty", job["extraction_errors"])
+        self.assertIsNone(job["result"]["email"]["value"])
+
+    def test_corrupted_document_can_be_retried(self) -> None:
+        cv_path = Path(self.tmpdir.name) / "broken.docx"
+        cv_path.write_bytes(b"PK\x03\x04broken")
+        file_data = {"id": "ONB-BROKEN", "original_name": "broken.docx", "stored_name": "ONB-BROKEN.docx"}
+        self.service.patch_step("user-1", step="cv", data={"file": file_data})
+
+        job = self.service.parse_cv("user-1", "ONB-BROKEN", cv_path)
+        retried = self.service.retry_cv_parse("user-1", job["id"])
+
+        self.assertEqual(job["status"], "failed_extraction")
+        self.assertEqual(retried["status"], "queued")
 
     def test_required_consents_are_enforced(self) -> None:
         with self.assertRaises(ValueError):
