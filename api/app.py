@@ -12,12 +12,13 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from ai.ai_gateway import get_default_ai_gateway, send_message_to_ai
-from api.agent import AGENT_DASHBOARD_HTML
+from api.agent_dashboard_page import AGENT_DASHBOARD_HTML
 from api.onboarding_page import AGENT_ONBOARDING_HTML
 from api.chat import AI_CHAT_HTML
 from api.control_center import CONTROL_CENTER_HTML
 from api.dashboard import DASHBOARD_HTML
 from api.dependencies import (
+    get_database,
     get_agent_profile_service,
     get_agent_collaboration_service,
     get_competency_intelligence_service,
@@ -74,13 +75,15 @@ from api.schemas import (
     StatusUpdate,
     TargetCompetencyRequirement,
     UserCompetencyCreate,
+    UserRegistration,
     VacancyCreate,
     VerificationUpdate,
 )
 from chat import build_public_reply, get_next_question, validate_one_question_rule
 from chat.public_tone import acknowledgement_for, tone_profile_for
 from chat.intents import SCENARIO_TO_INTENT, ChatIntent
-from core.models import Candidate, Employer, Vacancy, new_id, utc_now_iso
+from core.models import Candidate, Employer, User, UserRole, Vacancy, new_id, utc_now_iso
+from database.repositories import UserRepository
 from employer_analysis import update_employer_profile_from_message
 from recommendations import RecruitmentAdvisor
 from services.country_config_loader import CountryConfigLoader
@@ -209,6 +212,11 @@ def localized_agent_onboarding(language_code: str) -> str:
     return AGENT_ONBOARDING_HTML
 
 
+@app.get("/api/agent/dashboard")
+def get_current_agent_dashboard(request: Request) -> dict:
+    return get_onboarding_workflow_service().dashboard(_onboarding_owner_id(request))
+
+
 @app.get("/agent/dashboard", response_class=HTMLResponse)
 def agent_dashboard_page() -> str:
     return AGENT_DASHBOARD_HTML
@@ -299,6 +307,24 @@ def api_logout(request: Request, response: Response) -> dict[str, str]:
         _ADMIN_SESSIONS.pop(session_id, None)
     response.delete_cookie("atlas_session")
     return {"status": "ok"}
+
+
+@app.post("/api/auth/register")
+def register_user(payload: UserRegistration, request: Request, response: Response) -> dict[str, str]:
+    existing_id = _onboarding_owner_id(request, allow_anonymous=False)
+    if existing_id:
+        _set_user_cookie(response, request, existing_id)
+        return {"status": "ok", "user_id": existing_id, "mode": "existing"}
+    user = User(
+        email=(payload.email or "").strip(),
+        phone=(payload.phone or "").strip(),
+        role=UserRole.CANDIDATE,
+        preferred_language=normalize_language_code(payload.preferred_language or "uk"),
+        metadata={"source": "agent_onboarding", "registered_at": utc_now_iso()},
+    )
+    UserRepository(get_database()).add(user)
+    _set_user_cookie(response, request, user.id)
+    return {"status": "ok", "user_id": user.id, "mode": "created"}
 
 
 @app.get("/api/health")
@@ -772,8 +798,12 @@ def delete_cv_file(file_id: str, request: Request) -> dict:
 
 @app.post("/api/cv/{file_id}/parse")
 def parse_cv_file(file_id: str, request: Request) -> dict:
+    owner_id = _onboarding_owner_id(request)
     try:
-        return get_onboarding_workflow_service().parse_cv(_onboarding_owner_id(request), file_id)
+        file_path = ONBOARDING_FILE_STORAGE.path_for(file_id, owner_id)
+        return get_onboarding_workflow_service().parse_cv(owner_id, file_id, file_path=file_path)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="CV file not found") from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -820,6 +850,16 @@ def get_onboarding_file(file_id: str, request: Request) -> FileResponse:
     except FileNotFoundError as error:
         raise HTTPException(status_code=404, detail="File not found") from error
     return FileResponse(path, media_type=item.mime_type, filename=item.original_name)
+
+
+@app.get("/api/onboarding/files/{file_id}/thumbnail")
+def get_onboarding_file_thumbnail(file_id: str, request: Request) -> FileResponse:
+    owner_id = _onboarding_owner_id(request)
+    try:
+        path = ONBOARDING_FILE_STORAGE.thumbnail_path_for(file_id, owner_id)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Thumbnail not found") from error
+    return FileResponse(path, media_type="image/webp", filename=f"{file_id}-thumbnail.webp")
 
 
 @app.delete("/api/onboarding/profile-photo/{file_id}")
@@ -1483,14 +1523,27 @@ def _delete_onboarding_file(request: Request, file_id: str, kind: str) -> dict:
     return {"success": True, "deleted": file_id}
 
 
-def _onboarding_owner_id(request: Request) -> str:
+def _set_user_cookie(response: Response, request: Request, user_id: str) -> None:
+    response.set_cookie(
+        "atlas_user_id",
+        user_id,
+        httponly=False,
+        secure=request.url.scheme == "https",
+        samesite="lax",
+        max_age=60 * 60 * 24 * 365,
+    )
+
+
+def _onboarding_owner_id(request: Request, allow_anonymous: bool = True) -> str:
     candidate = (
-        request.headers.get("x-atlas-user-id")
-        or request.cookies.get("atlas_user_id")
+        request.cookies.get("atlas_user_id")
+        or request.headers.get("x-atlas-user-id")
         or request.headers.get("x-forwarded-user")
     )
     if candidate:
         return "".join(char for char in candidate if char.isalnum() or char in ("-", "_"))[:96] or "anonymous"
+    if not allow_anonymous:
+        return ""
     client_host = request.client.host if request.client else "anonymous"
     return f"anonymous-{client_host}"
 

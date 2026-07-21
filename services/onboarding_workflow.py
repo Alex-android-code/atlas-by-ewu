@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import re
+import zipfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree
 
-from core.models import ConsentRecord, Document, DocumentStatus, new_id, utc_now_iso
+from core.models import ActivityEvent, ConsentRecord, Document, DocumentStatus, new_id, utc_now_iso
 from database.json_database import JsonDatabase
 from database.repositories import ActivityRepository, ConsentRepository, DocumentRepository
 from services.agent_profile_service import AgentProfileService
@@ -17,6 +21,7 @@ ONBOARDING_STEPS = [
     "agent",
     "profile_photo",
     "cv",
+    "cv_review",
     "personal_data",
     "profession",
     "experience",
@@ -80,23 +85,28 @@ class OnboardingWorkflowService:
             session["consents"] = self._store_consents(user_id, data or {})
         if step == "profile_photo" and (data or {}).get("file"):
             self.agent_profiles.save_onboarding_answer(user_id, "profile_photo", data["file"])
+            self._ensure_document_record(user_id, data["file"], "profile_photo")
         if step == "cv" and (data or {}).get("file"):
             self.agent_profiles.save_onboarding_answer(user_id, "uploaded_cv", data["file"])
             self._ensure_document_record(user_id, data["file"], "cv")
+        if step == "cv_review" and (data or {}).get("accepted_parsed_data"):
+            session.setdefault("data", {}).setdefault("cv", {})["accepted_parsed_data"] = data["accepted_parsed_data"]
+            self.accept_cv_parse(user_id, data["accepted_parsed_data"])
         self._sync_step_to_profile(user_id, step, data or {})
         session["current_step"] = next_step if next_step in ONBOARDING_STEPS else self._next_step(step)
         session["updated_at"] = utc_now_iso()
         session.setdefault("audit_log", []).append(_audit("step_saved", step))
         self.database.update(SESSION_COLLECTION, user_id, session)
+        self._record_activity(user_id, "onboarding_step_saved", step)
         return self._with_progress(session)
 
-    def parse_cv(self, user_id: str, file_id: str) -> dict[str, Any]:
+    def parse_cv(self, user_id: str, file_id: str, file_path: Path | None = None) -> dict[str, Any]:
         session = self.get_or_start(user_id)
         cv_data = session.get("data", {}).get("cv", {})
         file_data = cv_data.get("file") or {}
         if file_id != file_data.get("id"):
             raise ValueError("CV file is not attached to this onboarding session")
-        parsed = _deterministic_cv_parse(file_data, session.get("data", {}))
+        parsed = _deterministic_cv_parse(file_data, session.get("data", {}), _extract_cv_text(file_path, file_data) if file_path else "")
         job = {
             "id": new_id("CVP"),
             "user_id": user_id,
@@ -165,7 +175,50 @@ class OnboardingWorkflowService:
         session.setdefault("audit_log", []).append(_audit("onboarding_completed", "completed"))
         self.database.update(SESSION_COLLECTION, user_id, session)
         dashboard = self.agent_profiles.complete_onboarding(user_id)
+        self._record_activity(user_id, "onboarding_completed", "completed")
         return {"session": self._with_progress(session), "dashboard": dashboard.get("dashboard", {})}
+
+    def dashboard(self, user_id: str) -> dict[str, Any]:
+        session = self.get_or_start(user_id)
+        profile = self.agent_profiles.get_or_create_profile(user_id).to_dict()
+        dna = session.get("professional_dna") or self.database.get(DNA_COLLECTION, user_id)
+        documents = [
+            item.to_dict()
+            for item in self.documents.list()
+            if item.owner_id == user_id and item.metadata.get("onboarding_file_id")
+        ]
+        agent = profile.get("metadata", {}).get("ai_agent", {})
+        recommendations = []
+        if dna:
+            recommendations = [
+                {"type": "rule_based", "title": item, "source": dna.get("version", "professional_dna_v1_rule_based")}
+                for item in dna.get("recommendedActions", [])
+            ]
+        return {
+            "user_id": user_id,
+            "onboarding": {
+                "status": session.get("status"),
+                "current_step": session.get("current_step"),
+                "progress": session.get("progress"),
+                "completed_at": session.get("completed_at"),
+            },
+            "agent": {
+                "name": agent.get("name") or "ATLAS Agent",
+                "language": agent.get("language") or "uk",
+                "style": agent.get("style") or "professional",
+                "goal": agent.get("goal") or "",
+            },
+            "profile": profile,
+            "cv": session.get("data", {}).get("cv", {}),
+            "photo": session.get("data", {}).get("profile_photo", {}),
+            "documents": documents,
+            "professional_dna": dna,
+            "recommendations": recommendations,
+            "unavailable_modules": [
+                {"key": "vacancies", "title": "Vacancy matching", "reason": "No live recommendations generated yet."},
+                {"key": "employer_messages", "title": "Employer messages", "reason": "Available after profile publication and employer contact."},
+            ],
+        }
 
     def _sync_step_to_profile(self, user_id: str, step: str, data: dict[str, Any]) -> None:
         if step == "agent":
@@ -244,6 +297,19 @@ class OnboardingWorkflowService:
             )
         )
 
+    def _record_activity(self, user_id: str, action: str, step: str) -> None:
+        self.activity.add(
+            ActivityEvent(
+                entity_type="onboarding",
+                entity_id=user_id,
+                action=action,
+                old_value=None,
+                new_value=step,
+                note=f"Agent onboarding {step}",
+                actor_id=user_id,
+            )
+        )
+
     @staticmethod
     def _validate_step(step: str) -> None:
         if step not in ONBOARDING_STEPS:
@@ -269,27 +335,97 @@ class OnboardingWorkflowService:
         }
 
 
-def _deterministic_cv_parse(file_data: dict[str, Any], onboarding_data: dict[str, Any]) -> dict[str, Any]:
+def _deterministic_cv_parse(file_data: dict[str, Any], onboarding_data: dict[str, Any], cv_text: str = "") -> dict[str, Any]:
     personal = onboarding_data.get("personal_data", {})
     profession = onboarding_data.get("profession", {})
     filename = file_data.get("original_name", "")
+    extracted = _extract_basic_cv_fields(cv_text)
     return {
-        "fullName": _value(personal.get("fullName"), "personal_data.fullName"),
-        "email": _value(personal.get("email"), "personal_data.email"),
-        "phone": _value(personal.get("phone"), "personal_data.phone"),
-        "location": _value(personal.get("location"), "personal_data.location"),
+        "fullName": _value(personal.get("fullName") or extracted.get("fullName"), "personal_data.fullName" if personal.get("fullName") else "cv_text"),
+        "email": _value(personal.get("email") or extracted.get("email"), "personal_data.email" if personal.get("email") else "cv_text"),
+        "phone": _value(personal.get("phone") or extracted.get("phone"), "personal_data.phone" if personal.get("phone") else "cv_text"),
+        "location": _value(personal.get("location") or extracted.get("location"), "personal_data.location" if personal.get("location") else "cv_text"),
         "headline": _value(profession.get("headline") or profession.get("profession"), "profession.headline"),
         "summary": _value("", "not_found"),
         "professions": _list_value([profession.get("profession")] if profession.get("profession") else [], "profession.profession"),
-        "skills": _list_value(profession.get("skills") or [], "profession.skills"),
+        "skills": _list_value(profession.get("skills") or extracted.get("skills") or [], "profession.skills" if profession.get("skills") else "cv_text"),
         "workExperience": onboarding_data.get("experience", {}).get("records", []),
         "education": onboarding_data.get("education", {}).get("records", []),
         "certificates": onboarding_data.get("education", {}).get("certificates", []),
         "languages": onboarding_data.get("languages", {}).get("records", []),
-        "source": {"fileId": file_data.get("id"), "fileName": filename},
-        "confidence": "low" if not personal and not profession else "medium",
-        "warnings": ["ATLAS extracted only confirmed onboarding facts and did not invent missing CV data."],
+        "source": {"fileId": file_data.get("id"), "fileName": filename, "textExtracted": bool(cv_text.strip())},
+        "confidence": "medium" if (personal or profession or extracted) else "low",
+        "warnings": ["ATLAS extracted only facts found in uploaded CV text or already confirmed onboarding data."],
     }
+
+
+def _extract_cv_text(path: Path | None, file_data: dict[str, Any]) -> str:
+    if not path or not path.exists():
+        return ""
+    suffix = path.suffix.lower()
+    try:
+        if suffix == ".pdf":
+            return _extract_pdf_text(path)
+        if suffix in {".docx", ".odt"}:
+            return _extract_zip_xml_text(path)
+        if suffix == ".rtf":
+            return _strip_rtf(path.read_text(encoding="utf-8", errors="ignore"))
+        if suffix == ".doc":
+            return ""
+    except Exception:
+        return ""
+    return ""
+
+
+def _extract_pdf_text(path: Path) -> str:
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return ""
+    reader = PdfReader(str(path))
+    return "\n".join((page.extract_text() or "") for page in reader.pages[:6])
+
+
+def _extract_zip_xml_text(path: Path) -> str:
+    chunks: list[str] = []
+    with zipfile.ZipFile(path) as archive:
+        for name in archive.namelist():
+            if not name.endswith(".xml"):
+                continue
+            if not (name.startswith("word/") or name.startswith("content.xml")):
+                continue
+            root = ElementTree.fromstring(archive.read(name))
+            chunks.extend(text.strip() for text in root.itertext() if text and text.strip())
+    return "\n".join(chunks)
+
+
+def _strip_rtf(text: str) -> str:
+    text = re.sub(r"\\'[0-9a-fA-F]{2}", " ", text)
+    text = re.sub(r"\\[a-zA-Z]+\d* ?", " ", text)
+    return re.sub(r"[{}]", " ", text)
+
+
+def _extract_basic_cv_fields(text: str) -> dict[str, Any]:
+    normalized = re.sub(r"\s+", " ", text or "").strip()
+    if not normalized:
+        return {}
+    result: dict[str, Any] = {}
+    email = re.search(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+", normalized)
+    if email:
+        result["email"] = email.group(0)
+    phone = re.search(r"(?:\+?\d[\d\s().-]{7,}\d)", normalized)
+    if phone:
+        result["phone"] = phone.group(0).strip()
+    first_line = next((line.strip() for line in text.splitlines() if 4 <= len(line.strip()) <= 80), "")
+    if first_line and not re.search(r"@|http|www|curriculum|resume|cv", first_line, re.I):
+        result["fullName"] = first_line
+    skills_match = re.search(r"(?:skills|навички|umiejętności|компетенции)\s*[:\-]\s*([^.;]{3,220})", normalized, re.I)
+    if skills_match:
+        result["skills"] = [item.strip() for item in re.split(r"[,/|;]", skills_match.group(1)) if item.strip()][:20]
+    location_match = re.search(r"(?:location|місто|city|адреса)\s*[:\-]\s*([^.;]{3,80})", normalized, re.I)
+    if location_match:
+        result["location"] = location_match.group(1).strip()
+    return result
 
 
 def _score_professional_dna(data: dict[str, Any]) -> dict[str, Any]:
@@ -326,6 +462,20 @@ def _score_professional_dna(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "overallScore": overall,
         **scores,
+        "formula": {
+            "overallScore": "round(sum(component_scores) / 86 * 100)",
+            "maxComponentTotal": 86,
+            "components": {
+                "profileCompleteness": "completed core sections / 10 * 100",
+                "experienceScore": "14 when at least one experience record exists",
+                "skillsScore": "14 when skills exist",
+                "educationScore": "10 when education records exist",
+                "languagesScore": "10 when language records exist",
+                "mobilityScore": "8 when preferred countries exist",
+                "documentReadinessScore": "10 when CV is attached",
+                "marketReadinessScore": "10 when career goal exists",
+            },
+        },
         "strengths": strengths or ["Profile foundation is created."],
         "gaps": gaps,
         "recommendedActions": actions,

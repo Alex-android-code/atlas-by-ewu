@@ -14,3 +14,4 @@ google-generativeai==0.8.5
 reportlab==4.2.5
 Pillow==10.4.0
 qrcode==7.4.2
+pypdf==4.3.1

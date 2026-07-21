@@ -19,8 +19,8 @@ from core.models import utc_now_iso
 PHOTO_MAX_BYTES = 10 * 1024 * 1024
 CV_MAX_BYTES = 15 * 1024 * 1024
 
-PHOTO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".heic", ".heif"}
-PHOTO_MIME_TYPES = {"image/png", "image/jpeg", "image/heic", "image/heif"}
+PHOTO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".heic", ".heif"}
+PHOTO_MIME_TYPES = {"image/png", "image/jpeg", "image/webp", "image/heic", "image/heif"}
 CV_EXTENSIONS = {".pdf", ".doc", ".docx", ".odt", ".rtf"}
 CV_MIME_TYPES = {
     "application/pdf",
@@ -39,6 +39,7 @@ class StoredOnboardingFile:
     kind: str
     original_name: str
     stored_name: str
+    thumbnail_name: str | None
     mime_type: str
     size: int
     created_at: str
@@ -51,10 +52,12 @@ class StoredOnboardingFile:
             "kind": self.kind,
             "original_name": self.original_name,
             "stored_name": self.stored_name,
+            "thumbnail_name": self.thumbnail_name,
             "mimeType": self.mime_type,
             "size": self.size,
             "created_at": self.created_at,
             "url": f"/api/onboarding/files/{self.id}",
+            "thumbnail_url": f"/api/onboarding/files/{self.id}/thumbnail" if self.thumbnail_name else "",
             "analysis": self.analysis,
         }
 
@@ -93,7 +96,8 @@ class OnboardingFileStorage:
 
         try:
             _validate_file(target_path, kind, original_name, detected_mime, written)
-            analysis = _analyze_file(target_path, kind, original_name, detected_mime)
+            thumbnail_name = _create_thumbnail(target_path, file_id, kind, original_name)
+            analysis = _analyze_file(target_path, kind, original_name, detected_mime, thumbnail_name)
         except Exception:
             target_path.unlink(missing_ok=True)
             raise
@@ -104,6 +108,7 @@ class OnboardingFileStorage:
             kind=kind,
             original_name=original_name,
             stored_name=stored_name,
+            thumbnail_name=thumbnail_name,
             mime_type=detected_mime,
             size=written,
             created_at=utc_now_iso(),
@@ -129,6 +134,15 @@ class OnboardingFileStorage:
             raise FileNotFoundError(file_id)
         return path
 
+    def thumbnail_path_for(self, file_id: str, owner_id: str) -> Path:
+        item = self.get(file_id, owner_id)
+        if not item.thumbnail_name:
+            raise FileNotFoundError(file_id)
+        path = self.base_dir / item.thumbnail_name
+        if not path.exists():
+            raise FileNotFoundError(file_id)
+        return path
+
     def delete(self, file_id: str, owner_id: str, kind: str | None = None) -> bool:
         with self._lock:
             index = self._load_index()
@@ -140,6 +154,8 @@ class OnboardingFileStorage:
             index.pop(file_id, None)
             self._save_index(index)
         (self.base_dir / item["stored_name"]).unlink(missing_ok=True)
+        if item.get("thumbnail_name"):
+            (self.base_dir / item["thumbnail_name"]).unlink(missing_ok=True)
         return True
 
     def _load_index(self) -> dict[str, dict[str, Any]]:
@@ -163,6 +179,7 @@ def _stored_from_dict(item: dict[str, Any]) -> StoredOnboardingFile:
         kind=item["kind"],
         original_name=item["original_name"],
         stored_name=item["stored_name"],
+        thumbnail_name=item.get("thumbnail_name"),
         mime_type=item["mimeType"],
         size=int(item["size"]),
         created_at=item["created_at"],
@@ -217,13 +234,28 @@ def _validate_document_signature(path: Path, suffix: str) -> None:
         raise ValueError("RTF-файл не вдалося прочитати.")
 
 
-def _analyze_file(path: Path, kind: str, original_name: str, mime_type: str) -> dict[str, Any]:
+def _create_thumbnail(path: Path, file_id: str, kind: str, original_name: str) -> str | None:
+    if kind != "profile_photo":
+        return None
+    suffix = Path(original_name).suffix.lower()
+    if suffix in {".heic", ".heif"}:
+        return None
+    thumbnail_name = f"{file_id}-thumb.webp"
+    thumbnail_path = path.with_name(thumbnail_name)
+    with Image.open(path) as image:
+        image = image.convert("RGB")
+        image.thumbnail((420, 420))
+        image.save(thumbnail_path, format="WEBP", quality=82, method=6)
+    return thumbnail_name
+
+
+def _analyze_file(path: Path, kind: str, original_name: str, mime_type: str, thumbnail_name: str | None) -> dict[str, Any]:
     if kind == "profile_photo":
-        return _analyze_photo(path, original_name)
+        return _analyze_photo(path, original_name, thumbnail_name)
     return _analyze_cv(original_name, mime_type)
 
 
-def _analyze_photo(path: Path, original_name: str) -> dict[str, Any]:
+def _analyze_photo(path: Path, original_name: str, thumbnail_name: str | None) -> dict[str, Any]:
     suffix = Path(original_name).suffix.lower()
     if suffix in {".heic", ".heif"}:
         return {
@@ -235,6 +267,7 @@ def _analyze_photo(path: Path, original_name: str) -> dict[str, Any]:
                 "lighting": "needs_review",
                 "single_person": "needs_review",
             },
+            "preview": {"available": False, "reason": "heic_fallback_no_server_converter"},
         }
     with Image.open(path) as image:
         width, height = image.size
@@ -255,6 +288,7 @@ def _analyze_photo(path: Path, original_name: str) -> dict[str, Any]:
             "not_document": "ok",
             "no_filters": "reviewed",
         },
+        "preview": {"available": bool(thumbnail_name), "thumbnail_name": thumbnail_name},
     }
 
 

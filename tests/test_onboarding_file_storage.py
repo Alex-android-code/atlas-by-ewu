@@ -34,7 +34,24 @@ class OnboardingFileStorageTests(unittest.TestCase):
         self.assertTrue(stored.id.startswith("ONB-"))
         self.assertEqual(stored.mime_type, "image/png")
         self.assertIn("/api/onboarding/files/", stored.to_dict()["url"])
+        self.assertIn("/api/onboarding/files/", stored.to_dict()["thumbnail_url"])
         self.assertTrue(self.storage.path_for(stored.id, "user-1").exists())
+        self.assertTrue(self.storage.thumbnail_path_for(stored.id, "user-1").exists())
+
+    def test_accepts_webp_profile_photo(self) -> None:
+        output = BytesIO()
+        Image.new("RGB", (20, 20), (12, 20, 40)).save(output, format="WEBP")
+
+        stored = self.storage.save(
+            owner_id="user-1",
+            kind="profile_photo",
+            filename="avatar.webp",
+            mime_type="image/webp",
+            stream=BytesIO(output.getvalue()),
+        )
+
+        self.assertEqual(stored.mime_type, "image/webp")
+        self.assertTrue(stored.thumbnail_name)
 
     def test_rejects_access_by_different_owner(self) -> None:
         stored = self.storage.save(

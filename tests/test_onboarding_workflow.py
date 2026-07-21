@@ -63,7 +63,7 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         self.assertEqual(job["status"], "completed")
         self.assertEqual(job["result"]["fullName"]["value"], "")
         self.assertEqual(job["result"]["confidence"], "low")
-        self.assertIn("did not invent", job["result"]["warnings"][0])
+        self.assertIn("only facts", job["result"]["warnings"][0])
 
     def test_required_consents_are_enforced(self) -> None:
         with self.assertRaises(ValueError):
@@ -84,6 +84,7 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         completed = self.service.complete("user-1")
 
         self.assertEqual(dna["version"], "professional_dna_v1_rule_based")
+        self.assertIn("formula", dna)
         self.assertEqual(completed["session"]["status"], "completed")
         self.assertEqual(completed["session"]["current_step"], "completed")
 

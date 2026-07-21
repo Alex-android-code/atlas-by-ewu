@@ -177,10 +177,9 @@ AGENT_ONBOARDING_HTML = r"""
     </section>
   </main>
   <script>
-    const userId = localStorage.getItem("atlas_user_id") || `user-${crypto.randomUUID()}`;
-    localStorage.setItem("atlas_user_id", userId);
-    const headers = {"Content-Type": "application/json", "X-ATLAS-User-Id": userId};
-    const steps = ["welcome","agent","profile_photo","cv","personal_data","profession","experience","education","languages","preferences","consents","professional_dna","completed"];
+    let userId = localStorage.getItem("atlas_user_id") || "";
+    let headers = {"Content-Type": "application/json"};
+    const steps = ["welcome","agent","profile_photo","cv","cv_review","personal_data","profession","experience","education","languages","preferences","consents","professional_dna","completed"];
     let session = null;
     let current = "welcome";
     let local = {};
@@ -200,7 +199,23 @@ AGENT_ONBOARDING_HTML = r"""
       return data;
     }
 
+    async function ensureUser() {
+      const registrationHeaders = {"Content-Type": "application/json"};
+      if (userId) registrationHeaders["X-ATLAS-User-Id"] = userId;
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: registrationHeaders,
+        body: JSON.stringify({preferred_language: localStorage.getItem("atlas_language") || "uk"})
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "User registration failed.");
+      userId = data.user_id;
+      localStorage.setItem("atlas_user_id", userId);
+      headers = {"Content-Type": "application/json", "X-ATLAS-User-Id": userId};
+    }
+
     async function load() {
+      await ensureUser();
       session = await api("/api/onboarding", {headers: {"X-ATLAS-User-Id": userId}});
       local = structuredClone(session.data || {});
       current = session.status === "completed" ? "completed" : (session.current_step || "welcome");
@@ -237,11 +252,17 @@ AGENT_ONBOARDING_HTML = r"""
       cv: () => `
         ${fileTemplate("cv", "CV / резюме", "PDF, DOC, DOCX, ODT, RTF до 15 MB", ".pdf,.doc,.docx,.odt,.rtf")}
         <div class="card" style="margin-top:14px">
+          <h3>Статус обробки</h3>
+          <p>${local.cv?.file ? "CV завантажено. На наступному кроці ATLAS проаналізує файл і попросить підтвердити дані." : "Очікуємо файл CV."}</p>
+        </div>`,
+      cv_review: () => `
+        <div class="card" style="margin-top:14px">
           <h3>Підтвердження даних з CV</h3>
           <p>AI не записує дані в профіль автоматично. Спочатку перегляньте витягнуті поля, відредагуйте або відхиліть.</p>
           <div class="actions">
             <button class="secondary" data-action="parse-cv" type="button">Проаналізувати CV</button>
-            <button class="secondary" data-action="accept-cv" type="button">Прийняти вибране</button>
+            <button class="secondary" data-action="accept-all-cv" type="button">Прийняти всі поля</button>
+            <button class="secondary" data-action="accept-cv" type="button">Прийняти вибрані</button>
             <button class="danger" data-action="reject-cv" type="button">Відхилити витягнуті дані</button>
           </div>
           <div id="cv-review">${cvReviewTemplate()}</div>
@@ -290,6 +311,7 @@ AGENT_ONBOARDING_HTML = r"""
       });
       document.querySelectorAll("[data-upload]").forEach(bindUpload);
       document.querySelector("[data-action='parse-cv']")?.addEventListener("click", parseCv);
+      document.querySelector("[data-action='accept-all-cv']")?.addEventListener("click", acceptAllCv);
       document.querySelector("[data-action='accept-cv']")?.addEventListener("click", acceptCv);
       document.querySelector("[data-action='reject-cv']")?.addEventListener("click", rejectCv);
       document.querySelector("[data-action='generate-dna']")?.addEventListener("click", generateDna);
@@ -338,6 +360,13 @@ AGENT_ONBOARDING_HTML = r"""
         const data = local.preferences || {};
         return {...data, countries: splitList(data.countriesText)};
       }
+      if (step === "cv_review") {
+        return {
+          accepted_parsed_data: local.cv?.accepted_parsed_data || {},
+          rejected: Boolean(local.cv?.parse_rejected),
+          job_id: session?.parsed_cv?.job_id || ""
+        };
+      }
       if (step === "consents") return {...(local.consents || {}), version: "atlas-rodo-v1", language: local.agent?.language || "uk"};
       return local[step] || {};
     }
@@ -345,6 +374,7 @@ AGENT_ONBOARDING_HTML = r"""
     function validate(step, data) {
       if (step === "profile_photo" && !data.file?.id) return fail("Додайте фото профілю.");
       if (step === "cv" && !data.file?.id) return fail("Додайте CV або резюме.");
+      if (step === "cv_review" && !hasAcceptedCvData() && !local.cv?.parse_rejected) return fail("Прийміть поля з CV або відхиліть витягнуті дані.");
       if (step === "personal_data" && (!data.fullName || !data.email)) return fail("Вкажіть ім'я та email.");
       if (step === "consents" && (!data.terms || !data.privacy || !data.aiProcessing)) return fail("Потрібні всі обов'язкові згоди.");
       return true;
@@ -417,14 +447,26 @@ AGENT_ONBOARDING_HTML = r"""
     }
 
     async function acceptCv() {
-      selectedParsed = selectedParsed || session?.parsed_cv?.result || {};
+      selectedParsed = collectSelectedCvFields();
+      if (!Object.keys(selectedParsed).length) return fail("Виберіть хоча б одне поле з CV.");
       await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed}), headers});
       setPath("cv.accepted_parsed_data", selectedParsed);
+      setPath("cv.parse_rejected", false);
       fail("Дані з CV прийнято. Можете продовжити.");
+    }
+
+    async function acceptAllCv() {
+      selectedParsed = collectAllCvFields();
+      if (!Object.keys(selectedParsed).length) return fail("Спочатку проаналізуйте CV.");
+      await api("/api/cv/parse-jobs/accept", {method: "POST", body: JSON.stringify({accepted: selectedParsed}), headers});
+      setPath("cv.accepted_parsed_data", selectedParsed);
+      setPath("cv.parse_rejected", false);
+      fail("Усі доступні дані з CV прийнято. Можете продовжити.");
     }
 
     function rejectCv() {
       setPath("cv.accepted_parsed_data", {});
+      setPath("cv.parse_rejected", true);
       selectedParsed = {};
       fail("Витягнуті дані відхилено. У профіль нічого не записано.");
     }
@@ -457,7 +499,7 @@ AGENT_ONBOARDING_HTML = r"""
 
     function fileTemplate(kind, title, hint, accept) {
       const file = local[kind]?.file;
-      const preview = kind === "profile_photo" && file?.url ? `<span>A</span>` : `<span>${kind === "profile_photo" ? "A" : "CV"}</span>`;
+      const preview = kind === "profile_photo" && file?.thumbnail_url ? `<img src="${file.thumbnail_url}" alt="Фото профілю">` : `<span>${kind === "profile_photo" ? "A" : "CV"}</span>`;
       return `
         <h2>${title}</h2>
         <div class="upload" data-upload="${kind}">
@@ -485,11 +527,46 @@ AGENT_ONBOARDING_HTML = r"""
     function cvReviewTemplate() {
       const parsedData = session?.parsed_cv?.result;
       if (!parsedData) return `<p class="small">Після аналізу тут з'являться поля з confidence і source.</p>`;
-      return `<div class="grid">${Object.entries(parsedData).filter(([key]) => !["source","warnings"].includes(key)).map(([key, value]) => {
+      return `<div class="grid">${Object.entries(parsedData).filter(([key]) => !["source","warnings","confidence"].includes(key)).map(([key, value]) => {
         const shown = typeof value === "object" && value !== null && "value" in value ? value.value : value;
         const confidence = typeof value === "object" && value !== null ? value.confidence || parsedData.confidence : parsedData.confidence;
-        return `<div class="card"><h3>${escapeHtml(key)}</h3><p>${escapeHtml(Array.isArray(shown) ? shown.join(", ") : JSON.stringify(shown ?? ""))}</p><span class="chip">${escapeHtml(confidence || "low")}</span></div>`;
+        const textValue = Array.isArray(shown) ? shown.join(", ") : (typeof shown === "object" ? JSON.stringify(shown ?? "") : String(shown ?? ""));
+        const hasValue = textValue.trim().length > 0 && textValue !== "[]";
+        return `<div class="card">
+          <label class="consent-row"><input type="checkbox" data-cv-select="${escapeHtml(key)}" ${hasValue ? "checked" : ""}><span><strong>${escapeHtml(key)}</strong></span></label>
+          <textarea data-cv-field="${escapeHtml(key)}">${escapeHtml(textValue)}</textarea>
+          <div class="chips"><span class="chip">${escapeHtml(confidence || "low")}</span><span class="chip">${escapeHtml(value?.source || parsedData.source?.fileName || "cv")}</span></div>
+        </div>`;
       }).join("")}</div><p class="small">${escapeHtml((parsedData.warnings || []).join(" "))}</p>`;
+    }
+
+    function collectSelectedCvFields() {
+      const result = {};
+      document.querySelectorAll("[data-cv-select]:checked").forEach((checkbox) => {
+        const key = checkbox.dataset.cvSelect;
+        const value = document.querySelector(`[data-cv-field="${CSS.escape(key)}"]`)?.value.trim();
+        if (value) result[key] = cvFieldValue(key, value);
+      });
+      return result;
+    }
+
+    function collectAllCvFields() {
+      const result = {};
+      document.querySelectorAll("[data-cv-field]").forEach((field) => {
+        const key = field.dataset.cvField;
+        const value = field.value.trim();
+        if (value) result[key] = cvFieldValue(key, value);
+      });
+      return result;
+    }
+
+    function cvFieldValue(key, value) {
+      const parsedData = session?.parsed_cv?.result || {};
+      const original = parsedData[key];
+      if (["skills", "professions"].includes(key)) {
+        return {value: splitList(value), source: "user_confirmed_cv_review", confidence: original?.confidence || "medium"};
+      }
+      return {value, source: "user_confirmed_cv_review", confidence: original?.confidence || "medium"};
     }
 
     function dnaTemplate() {
@@ -537,6 +614,7 @@ AGENT_ONBOARDING_HTML = r"""
       target[parts[0]] = value;
     }
     function splitList(value) { return String(value || "").split(",").map((item) => item.trim()).filter(Boolean); }
+    function hasAcceptedCvData() { return Object.keys(local.cv?.accepted_parsed_data || {}).length > 0; }
     function formatBytes(bytes) { return bytes ? `${(bytes / 1024 / 1024).toFixed(bytes > 1048576 ? 1 : 2)} MB` : "0 MB"; }
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[char]));

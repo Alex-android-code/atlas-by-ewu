@@ -152,6 +152,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserRegistration(BaseModel):
+    email: str | None = None
+    phone: str | None = None
+    preferred_language: str = "uk"
+
+
 class ConsentCreate(BaseModel):
     subject_id: str
     language: str = "uk"
