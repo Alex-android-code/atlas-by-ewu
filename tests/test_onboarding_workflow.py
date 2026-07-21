@@ -157,6 +157,24 @@ class OnboardingWorkflowServiceTests(unittest.TestCase):
         )
         self.assertIn("privacy", saved["consents"])
 
+    def test_profile_forms_sync_structured_records_without_duplicates(self) -> None:
+        experience = {"records": [{"title": "Coordinator", "organization": "EWU", "period": "2022-2024", "note": "Logistics"}]}
+        education = {"records": [{"title": "Logistics course", "organization": "ATLAS Academy", "period": "2023"}]}
+        languages = {"records": [{"title": "English", "organization": "B2", "period": "Work", "note": ""}]}
+
+        self.service.patch_step("user-1", step="experience", data=experience)
+        self.service.patch_step("user-1", step="experience", data=experience)
+        self.service.patch_step("user-1", step="education", data=education)
+        self.service.patch_step("user-1", step="languages", data=languages)
+        self.service.patch_step("user-1", step="preferences", data={"careerGoal": "Logistics lead", "countries": ["PL"], "format": "hybrid", "salary": "5000 PLN"})
+
+        profile = self.service.agent_profiles.get_or_create_profile("user-1")
+        self.assertEqual(len(profile.work_experience), 1)
+        self.assertEqual(profile.work_experience[0]["title"], "Coordinator")
+        self.assertEqual(profile.education[0]["title"], "Logistics course")
+        self.assertEqual(profile.languages[0]["title"], "English")
+        self.assertEqual(profile.relocation_preferences["preferred_work"], "hybrid")
+
     def test_generates_dna_and_completes(self) -> None:
         self.service.patch_step("user-1", step="agent", data={"name": "Ava"})
         self.service.patch_step("user-1", step="profession", data={"skills": ["Python"]})

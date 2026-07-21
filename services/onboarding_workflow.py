@@ -463,11 +463,24 @@ class OnboardingWorkflowService:
             if data.get("skills"):
                 self.agent_profiles.save_onboarding_answer(user_id, "skills", ", ".join(data.get("skills", [])))
         if step == "experience" and data.get("records"):
-            self.agent_profiles.save_onboarding_answer(user_id, "work_experience", data["records"])
+            profile = self.agent_profiles.get_or_create_profile(user_id)
+            profile.work_experience = _merge_records(profile.work_experience, data["records"])
+            profile.profile_completeness = self.agent_profiles.calculate_completeness(profile)
+            profile.updated_at = utc_now_iso()
+            self.agent_profiles.profiles.update(profile)
         if step == "education" and (data.get("records") or data.get("certificates")):
-            self.agent_profiles.save_onboarding_answer(user_id, "certificates", data)
+            profile = self.agent_profiles.get_or_create_profile(user_id)
+            profile.education = _merge_records(profile.education, data.get("records", []))
+            profile.certificates = _merge_records(profile.certificates, data.get("certificates", []))
+            profile.profile_completeness = self.agent_profiles.calculate_completeness(profile)
+            profile.updated_at = utc_now_iso()
+            self.agent_profiles.profiles.update(profile)
         if step == "languages" and data.get("records"):
-            self.agent_profiles.save_onboarding_answer(user_id, "languages", data["records"])
+            profile = self.agent_profiles.get_or_create_profile(user_id)
+            profile.languages = _merge_records(profile.languages, data["records"])
+            profile.profile_completeness = self.agent_profiles.calculate_completeness(profile)
+            profile.updated_at = utc_now_iso()
+            self.agent_profiles.profiles.update(profile)
         if step == "preferences":
             if data.get("careerGoal"):
                 self.agent_profiles.save_onboarding_answer(user_id, "career_goal", data["careerGoal"])
@@ -475,6 +488,8 @@ class OnboardingWorkflowService:
                 self.agent_profiles.save_onboarding_answer(user_id, "relocation_readiness", data.get("countries"))
             if data.get("salary"):
                 self.agent_profiles.save_onboarding_answer(user_id, "salary_expectations", data.get("salary"))
+            if data.get("format"):
+                self.agent_profiles.save_onboarding_answer(user_id, "preferred_work", data.get("format"))
 
     def _apply_accepted_cv_to_session(self, session: dict[str, Any], accepted: dict[str, Any]) -> None:
         data = session.setdefault("data", {})
@@ -993,6 +1008,22 @@ def _normalise_records(value: Any) -> list[dict[str, Any]]:
             return []
         return [{"title": item.strip()} for item in re.split(r"\n|;", text) if item.strip()]
     return [{"title": str(value)}]
+
+
+def _merge_records(existing: list[dict[str, Any]], incoming: Any) -> list[dict[str, Any]]:
+    result = list(existing or [])
+    seen = {_record_fingerprint(item) for item in result}
+    for item in _normalise_records(incoming):
+        fingerprint = _record_fingerprint(item)
+        if fingerprint and fingerprint not in seen:
+            result.append(item)
+            seen.add(fingerprint)
+    return result
+
+
+def _record_fingerprint(item: dict[str, Any]) -> str:
+    parts = [str(item.get(key, "")).strip().lower() for key in ("title", "name", "organization", "period", "level", "note")]
+    return "|".join(part for part in parts if part)
 
 
 def _confidence_number(value: Any) -> float:
