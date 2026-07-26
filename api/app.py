@@ -4,6 +4,7 @@ import os
 import hashlib
 import json
 import secrets
+from contextlib import asynccontextmanager
 from pathlib import Path
 from time import time
 
@@ -154,10 +155,17 @@ def _sanitize_sentry_event(event: dict, hint: dict | None = None) -> dict:
 _init_sentry()
 
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    configure_ewu_bot_webhook()
+    yield
+
+
 app = FastAPI(
     title="ATLAS/EWU API",
     description="MVP API for EWU candidates, employers, vacancies, matching, and coordinator dashboard.",
     version="0.1.0",
+    lifespan=lifespan,
 )
 app.mount(
     "/static",
@@ -169,11 +177,6 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 ONBOARDING_FILE_STORAGE = OnboardingFileStorage()
 app.include_router(ewu_bot_router)
-
-
-@app.on_event("startup")
-def startup_configure_ewu_bot_webhook() -> None:
-    configure_ewu_bot_webhook()
 
 _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
 AI_MESSAGE_LIMIT_PER_MINUTE = 20
