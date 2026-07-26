@@ -23,6 +23,20 @@ DEFAULT_CONSENT_SCOPES = [
     "ai_assistance",
     "operations_crm",
 ]
+CONSENT_LABELS = {
+    "privacy_policy": "Privacy policy acceptance",
+    "profile_processing": "Professional profile processing",
+    "ai_profiling": "AI profiling and personalized recommendations",
+    "cv_sharing": "CV sharing with a specific employer",
+    "marketing": "Marketing communications",
+}
+DEFAULT_RETENTION_RULES = {
+    "unfinished_registration": 30,
+    "ai_conversation_history": 180,
+    "technical_logs": 90,
+    "inactive_profile": 365,
+    "cv_documents": 730,
+}
 DATA_SUBJECT_REQUEST_TYPES = {"export", "delete", "rectify", "restrict_processing", "consent_withdrawal"}
 DATA_SUBJECT_REQUEST_ALIASES = {
     "data_export": "export",
@@ -61,9 +75,35 @@ class RodoService:
             ],
             "processors": ["Render", "Telegram", "Google Apps Script / Google Sheets", "Gemini / Google AI"],
             "rights": ["access", "export", "rectification", "deletion", "restriction", "objection"],
-            "retention": "Retention periods are operational and must be finalized before enterprise rollout.",
+            "retention": self.retention_schedule(),
             "contact": "Use the ATLAS/EWU official contact channel to submit privacy requests.",
         }
+
+    def retention_schedule(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "data_type": data_type,
+                "retention_days": days,
+                "status": "policy_configured",
+                "requires_automation": True,
+            }
+            for data_type, days in DEFAULT_RETENTION_RULES.items()
+        ]
+
+    def consent_summary(self, subject_id: str) -> list[dict[str, Any]]:
+        latest: dict[str, bool] = {}
+        for consent in self.consents.list():
+            if consent.subject_id == subject_id:
+                for scope in consent.scopes:
+                    latest[scope] = bool(consent.accepted and not consent.revoked_at)
+        return [
+            {
+                "type": key,
+                "label": label,
+                "granted": latest.get(key, False),
+            }
+            for key, label in CONSENT_LABELS.items()
+        ]
 
     def record_consent(
         self,

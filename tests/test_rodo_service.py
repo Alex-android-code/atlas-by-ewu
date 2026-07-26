@@ -11,7 +11,7 @@ from database.repositories import (
     EmployerRepository,
     UserRepository,
 )
-from services.rodo_service import DEFAULT_CONSENT_SCOPES, PRIVACY_NOTICE_VERSION, RodoService
+from services.rodo_service import DEFAULT_CONSENT_SCOPES, DEFAULT_RETENTION_RULES, PRIVACY_NOTICE_VERSION, RodoService
 
 
 class RodoServiceTests(unittest.TestCase):
@@ -37,6 +37,7 @@ class RodoServiceTests(unittest.TestCase):
         self.assertEqual(notice["version"], PRIVACY_NOTICE_VERSION)
         self.assertIn("export", notice["rights"])
         self.assertIn("Render", notice["processors"])
+        self.assertEqual(notice["retention"][0]["status"], "policy_configured")
 
     def test_record_consent_uses_default_scopes_and_hashes_ip(self):
         consent = self.service.record_consent(
@@ -91,6 +92,22 @@ class RodoServiceTests(unittest.TestCase):
         self.assertEqual(len(exported["data_subject_requests"]), 1)
         self.assertEqual(len(exported["candidates"]), 1)
         self.assertEqual(exported["employers"], [])
+
+    def test_retention_schedule_and_consent_summary(self):
+        self.service.record_consent(
+            subject_id="user-1",
+            language="uk",
+            source="web",
+            scopes=["privacy_policy", "ai_profiling"],
+        )
+
+        retention = self.service.retention_schedule()
+        summary = self.service.consent_summary("user-1")
+
+        self.assertEqual({item["data_type"] for item in retention}, set(DEFAULT_RETENTION_RULES))
+        self.assertTrue(next(item for item in summary if item["type"] == "privacy_policy")["granted"])
+        self.assertTrue(next(item for item in summary if item["type"] == "ai_profiling")["granted"])
+        self.assertFalse(next(item for item in summary if item["type"] == "marketing")["granted"])
 
 
 if __name__ == "__main__":

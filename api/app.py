@@ -114,6 +114,7 @@ from services.gemini_service import (
     normalize_language,
     sanitize_user_text,
 )
+from services.friend_agent import worker_agent_context
 from services.onboarding_file_storage import OnboardingFileStorage
 from services.intent_detector import IntentDetectorService
 from services.language_detector import LanguageDetectorService
@@ -580,6 +581,16 @@ def get_public_country(country_id_or_code: str) -> dict:
 @app.get("/api/privacy/notice")
 def privacy_notice(language: str = "uk") -> dict:
     return get_rodo_service().privacy_notice(language=language)
+
+
+@app.get("/api/privacy/retention")
+def privacy_retention_schedule() -> dict:
+    return {"retention": get_rodo_service().retention_schedule()}
+
+
+@app.get("/api/privacy/consent-summary")
+def privacy_consent_summary(request: Request) -> dict:
+    return {"subject_id": _onboarding_owner_id(request), "consents": get_rodo_service().consent_summary(_onboarding_owner_id(request))}
 
 
 @app.post("/api/rodo/consents")
@@ -1378,6 +1389,9 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
         employer_experience = None
     profile["scenario"] = intent_result.scenario
     profile["tone_profile"] = tone_profile_for(intent_result.scenario)
+    friend_agent = worker_agent_context(payload.message, language=language, profile=profile) if agent_type != "employer" else None
+    if friend_agent:
+        profile["friend_agent"] = friend_agent
     profile["detected_intent"] = {
         "scenario": intent_result.scenario,
         "agent_type": intent_result.agent_type,
@@ -1397,6 +1411,7 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
             "ui_language": normalize_language_code(payload.ui_language) or normalize_language_code(payload.saved_language),
             "conversation_language": language,
             "tone_profile": profile["tone_profile"],
+            "friend_agent": friend_agent,
             "translations": translations,
             "employer_experience": employer_experience,
             "intent": profile["detected_intent"],
@@ -1442,6 +1457,7 @@ def ai_chat_message(payload: AIChatRequest) -> dict:
             "valid": validation.valid,
             "warnings": validation.warnings,
         },
+        "friend_agent": friend_agent,
     }
 
 
