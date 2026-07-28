@@ -55,6 +55,7 @@ from services.agent_profile_service import AgentProfileService
 from services.employer_onboarding_workflow import EmployerOnboardingWorkflowService
 from services.agent_collaboration import AgentCollaborationRepositories, AgentCollaborationService
 from services.competency_intelligence import CompetencyIntelligenceRepositories, CompetencyIntelligenceService
+from services.colosseum_mvp import ColosseumMVPService
 from services.country_config_loader import CountryConfigLoader
 from services.country_management import CountryManagementService
 from services.corporate_ai import CorporateAIAgentService, CorporateAIRepositories
@@ -144,6 +145,17 @@ def get_recruitment_workflow_service() -> RecruitmentWorkflowService:
         database=database,
         vacancies=VacancyRepository(database),
         candidates=CandidateRepository(database),
+        activity=ActivityRepository(database),
+    )
+
+
+def get_colosseum_mvp_service() -> ColosseumMVPService:
+    database = get_database()
+    return ColosseumMVPService(
+        database=database,
+        candidates=CandidateRepository(database),
+        employers=EmployerRepository(database),
+        vacancies=VacancyRepository(database),
         activity=ActivityRepository(database),
     )
 

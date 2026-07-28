@@ -23,6 +23,7 @@ from api.dependencies import (
     get_agent_profile_service,
     get_agent_collaboration_service,
     get_competency_intelligence_service,
+    get_colosseum_mvp_service,
     get_corporate_ai_agent_service,
     get_country_management_service,
     get_crm_service,
@@ -59,6 +60,8 @@ from api.schemas import (
     CountryVisibilityUpdate,
     DataSubjectRequestCreate,
     DataSubjectRequestStatusUpdate,
+    CredentialDecisionPayload,
+    CredentialRequestPayload,
     AgentCollaborationConsentGrantCreate,
     AgentCollaborationConsentRevoke,
     AgentCollaborationProposalCreate,
@@ -77,6 +80,8 @@ from api.schemas import (
     EmployerCreate,
     EmployerCompetencyRequirementCreate,
     EmployerOnboardingStepPatch,
+    EscrowCreatePayload,
+    EscrowMilestonePayload,
     CompanyPayload,
     CompanyVerificationPayload,
     CompanyLocationPayload,
@@ -90,6 +95,8 @@ from api.schemas import (
     ProfileSectionPayload,
     RecruitmentPayload,
     PrivacyRequestCreate,
+    PrivacyDeleteRequestPayload,
+    PrivacyRevokeConsentPayload,
     SkillGapAnalysisRequest,
     StatusUpdate,
     TargetCompetencyRequirement,
@@ -252,6 +259,11 @@ def agent_applications_page() -> str:
 @app.get("/agent/matching/{match_id}", response_class=HTMLResponse)
 def agent_matching_page(match_id: str) -> str:
     return _matching_page_html(match_id, view="candidate")
+
+
+@app.get("/demo", response_class=HTMLResponse)
+def colosseum_demo_page() -> str:
+    return _colosseum_demo_html()
 
 
 @app.get("/{language_code}/agent/dashboard", response_class=HTMLResponse)
@@ -557,6 +569,29 @@ def register_user(payload: UserRegistration, request: Request, response: Respons
     UserRepository(get_database()).add(user)
     _set_user_cookie(response, request, user.id)
     return {"status": "ok", "user_id": user.id, "mode": "created"}
+
+
+@app.post("/auth/register")
+def auth_register_alias(payload: UserRegistration, request: Request, response: Response) -> dict[str, str]:
+    return register_user(payload, request, response)
+
+
+@app.post("/auth/login")
+def auth_login_alias(payload: LoginRequest, request: Request, response: Response) -> dict[str, str]:
+    return api_login(payload, request, response)
+
+
+@app.post("/auth/logout")
+def auth_logout_alias(request: Request, response: Response) -> dict[str, str]:
+    return api_logout(request, response)
+
+
+@app.get("/auth/me")
+def auth_me_alias(request: Request) -> dict:
+    user_id = _onboarding_owner_id(request, allow_anonymous=False)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"user_id": user_id, "role": _api_role(request), "authenticated": True}
 
 
 @app.get("/api/health")
@@ -1063,6 +1098,256 @@ def create_privacy_request(payload: PrivacyRequestCreate, request: Request) -> d
             note=payload.note,
         )
         return {"status": "ok", "request": data_request.to_dict()}
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/privacy/export")
+def privacy_export(request: Request) -> dict:
+    subject_id = _onboarding_owner_id(request)
+    export = get_rodo_service().export_subject_data(subject_id)
+    export["privacy_model"] = {
+        "statement": "Designed according to GDPR/RODO privacy-by-design principles.",
+        "on_chain_pii": False,
+        "on_chain_data": ["credential_hash", "escrow_proof_hash", "transaction_signature"],
+    }
+    return export
+
+
+@app.post("/privacy/delete-request")
+def privacy_delete_request(payload: PrivacyDeleteRequestPayload, request: Request) -> dict:
+    subject_id = _onboarding_owner_id(request)
+    privacy_request = get_colosseum_mvp_service().privacy_delete_request(
+        subject_id=subject_id,
+        contact=payload.contact,
+        note=payload.note,
+    )
+    return {"status": "ok", "request": privacy_request}
+
+
+@app.post("/privacy/revoke-consent")
+def privacy_revoke_consent(payload: PrivacyRevokeConsentPayload, request: Request) -> dict:
+    subject_id = _onboarding_owner_id(request)
+    try:
+        onboarding = get_onboarding_workflow_service().withdraw_consent(
+            subject_id,
+            payload.consent_type,
+            reason=payload.reason,
+        )
+    except ValueError:
+        onboarding = None
+    record = get_colosseum_mvp_service().privacy_revoke_consent(
+        subject_id=subject_id,
+        consent_type=payload.consent_type,
+        reason=payload.reason,
+    )
+    return {"status": "ok", "request": record, "onboarding_consent": onboarding}
+
+
+@app.get("/api/demo/status")
+def colosseum_demo_status() -> dict:
+    return get_colosseum_mvp_service().demo_status()
+
+
+@app.post("/api/demo/reset")
+def colosseum_demo_reset(request: Request) -> dict:
+    return get_colosseum_mvp_service().reset_demo(actor_id=_onboarding_owner_id(request))
+
+
+@app.get("/api/credentials")
+def list_credentials(request: Request) -> dict:
+    try:
+        role = _api_role(request)
+        return {"credentials": get_colosseum_mvp_service().list_credentials(role, actor_id=_onboarding_owner_id(request))}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.post("/api/credentials/request")
+def request_credential(payload: CredentialRequestPayload, request: Request) -> dict:
+    try:
+        credential = get_colosseum_mvp_service().request_credential(
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="candidate"),
+        )
+        return {"status": "ok", "credential": credential}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/credentials/{credential_id}")
+def get_credential(credential_id: str) -> dict:
+    try:
+        return {"credential": get_colosseum_mvp_service().get_credential(credential_id)}
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/credentials/{credential_id}/verify")
+def verify_credential(credential_id: str, payload: CredentialDecisionPayload, request: Request) -> dict:
+    try:
+        credential = get_colosseum_mvp_service().verify_credential(
+            credential_id,
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="issuer"),
+        )
+        return {"status": "ok", "credential": credential}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/credentials/{credential_id}/reject")
+def reject_credential(credential_id: str, payload: CredentialDecisionPayload, request: Request) -> dict:
+    try:
+        credential = get_colosseum_mvp_service().reject_credential(
+            credential_id,
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="issuer"),
+        )
+        return {"status": "ok", "credential": credential}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/credentials/{credential_id}/revoke")
+def revoke_credential(credential_id: str, payload: CredentialDecisionPayload, request: Request) -> dict:
+    try:
+        credential = get_colosseum_mvp_service().revoke_credential(
+            credential_id,
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="issuer"),
+        )
+        return {"status": "ok", "credential": credential}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/credentials/{credential_id}/anchor-solana")
+def anchor_credential_solana(credential_id: str, request: Request) -> dict:
+    try:
+        credential = get_colosseum_mvp_service().anchor_credential(
+            credential_id,
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="issuer"),
+        )
+        return {"status": "ok", "credential": credential}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/escrows")
+def list_escrows(request: Request) -> dict:
+    try:
+        return {"escrows": get_colosseum_mvp_service().list_escrows(_api_role(request, default="employer"))}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+
+@app.post("/api/escrows")
+def create_escrow(payload: EscrowCreatePayload, request: Request) -> dict:
+    try:
+        escrow = get_colosseum_mvp_service().create_escrow(
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="employer"),
+        )
+        return {"status": "ok", "escrow": escrow}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/escrows/{escrow_id}")
+def get_escrow(escrow_id: str) -> dict:
+    try:
+        return {"escrow": get_colosseum_mvp_service().get_escrow(escrow_id)}
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.post("/api/escrows/{escrow_id}/fund")
+def fund_escrow(escrow_id: str, request: Request) -> dict:
+    try:
+        return {"status": "ok", "escrow": get_colosseum_mvp_service().fund_escrow(escrow_id, _onboarding_owner_id(request), _api_role(request, default="employer"))}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/escrows/{escrow_id}/approve-milestone")
+def approve_escrow_milestone(escrow_id: str, payload: EscrowMilestonePayload, request: Request) -> dict:
+    try:
+        escrow = get_colosseum_mvp_service().approve_milestone(
+            escrow_id,
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="employer"),
+        )
+        return {"status": "ok", "escrow": escrow}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/escrows/{escrow_id}/release")
+def release_escrow(escrow_id: str, request: Request) -> dict:
+    try:
+        escrow = get_colosseum_mvp_service().release_escrow(
+            escrow_id,
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="employer"),
+        )
+        return {"status": "ok", "escrow": escrow}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/escrows/{escrow_id}/dispute")
+def dispute_escrow(escrow_id: str, payload: EscrowMilestonePayload, request: Request) -> dict:
+    try:
+        escrow = get_colosseum_mvp_service().dispute_escrow(
+            escrow_id,
+            payload.model_dump(),
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="employer"),
+        )
+        return {"status": "ok", "escrow": escrow}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.post("/api/escrows/{escrow_id}/refund")
+def refund_escrow(escrow_id: str, request: Request) -> dict:
+    try:
+        escrow = get_colosseum_mvp_service().refund_escrow(
+            escrow_id,
+            actor_id=_onboarding_owner_id(request),
+            role=_api_role(request, default="employer"),
+        )
+        return {"status": "ok", "escrow": escrow}
+    except PermissionError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
@@ -1791,6 +2076,55 @@ def update_recruitment_vacancy(vacancy_id: str, payload: RecruitmentPayload, req
         raise HTTPException(status_code=400, detail=str(error)) from error
 
 
+@app.get("/jobs")
+def jobs_list_alias(request: Request, companyId: str | None = None, status: str | None = None, limit: int = 25, offset: int = 0) -> dict:
+    return list_vacancies(request, companyId=companyId, status=status, limit=limit, offset=offset)
+
+
+@app.post("/jobs")
+def jobs_create_alias(payload: RecruitmentPayload, request: Request) -> dict:
+    return create_vacancy(payload, request)
+
+
+@app.get("/jobs/{job_id}.json")
+def jobs_get_alias(job_id: str, request: Request) -> dict:
+    return get_vacancy(job_id, request)
+
+
+@app.patch("/jobs/{job_id}")
+def jobs_patch_alias(job_id: str, payload: RecruitmentPayload, request: Request) -> dict:
+    return update_recruitment_vacancy(job_id, payload, request)
+
+
+@app.post("/jobs/{job_id}/match")
+def jobs_match_alias(job_id: str, request: Request) -> dict:
+    try:
+        return get_matching_engine_service().run(vacancy_id=job_id, actor_id=_onboarding_owner_id(request))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/jobs/{job_id}/candidates")
+def jobs_candidates_alias(job_id: str) -> dict:
+    matches = [
+        match.to_dict()
+        for match in get_crm_service().matches.list()
+        if match.vacancy_id == job_id
+    ]
+    candidates = {candidate.id: candidate.to_dict() for candidate in get_crm_service().candidates.list()}
+    return {
+        "job_id": job_id,
+        "candidates": [
+            {
+                "candidate": candidates.get(item["candidate_id"]),
+                "match": item,
+            }
+            for item in matches
+            if candidates.get(item["candidate_id"])
+        ],
+    }
+
+
 @app.post("/api/vacancies/{vacancy_id}/publish")
 def publish_recruitment_vacancy(vacancy_id: str, request: Request) -> dict:
     try:
@@ -2244,6 +2578,32 @@ load().catch(e=>document.getElementById("match").textContent=e.message);
 </script></body></html>"""
 
 
+def _colosseum_demo_html() -> str:
+    return """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ATLAS | Colosseum Demo</title><style>
+:root{--bg:#050914;--panel:#0a1128;--line:#294061;--gold:#d7b56d;--silver:#c8d2e0;--text:#f5f7fb;--muted:#96a4b8}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 30% 0,#12213f 0,#050914 42%,#02040a 100%);color:var(--text);font-family:Segoe UI,Roboto,Arial,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:32px 18px 60px}header{display:flex;gap:18px;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:18px}
+h1{margin:0;font-size:clamp(28px,4vw,54px);font-weight:500;letter-spacing:.02em}.muted{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:18px}
+.card{background:rgba(10,17,40,.86);border:1px solid var(--line);border-radius:8px;padding:18px;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+button,a.button{border:1px solid rgba(215,181,109,.75);background:linear-gradient(180deg,#e4c983,#9b7832);color:#07111f;font-weight:700;border-radius:6px;padding:11px 14px;text-decoration:none;cursor:pointer}
+button.secondary{background:transparent;color:var(--silver);border-color:var(--line)}pre{white-space:pre-wrap;word-break:break-word;background:#050914;border:1px solid var(--line);border-radius:8px;padding:14px;min-height:120px}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:5px 9px;color:var(--silver);margin:3px 4px 3px 0}
+</style></head><body><main>
+<header><div><h1>ATLAS Colosseum MVP</h1><p class="muted">Profile -> Verify -> Match -> Hire -> Settle. AI recommends, humans confirm.</p></div><a class="button" href="/">ATLAS</a></header>
+<section class="grid"><article class="card"><h2>Demo Control</h2><p class="muted">Seed creates a repeatable candidate, employer, credential proof, and escrow agreement.</p><button id="seed">Seed Demo</button> <button class="secondary" id="reset">Reset</button></article><article class="card"><h2>Status</h2><pre id="status">Loading...</pre></article><article class="card"><h2>Human Control</h2><span class="pill">AI Suggested</span><span class="pill">User Confirmed</span><span class="pill">Issuer Verified</span><span class="pill">Employer Approved</span><span class="pill">On-chain Confirmed</span></article></section>
+<section class="grid"><article class="card"><h2>Credential</h2><pre id="credential">{}</pre></article><article class="card"><h2>Escrow</h2><pre id="escrow">{}</pre></article></section>
+</main><script>
+const headers={"X-ATLAS-Role":"admin","X-ATLAS-User-Id":"demo-operator"};
+const out=(id,data)=>document.getElementById(id).textContent=JSON.stringify(data,null,2);
+async function api(path,method="GET",body){const res=await fetch(path,{method,headers:{...headers,"content-type":"application/json"},body:body?JSON.stringify(body):undefined});const data=await res.json();if(!res.ok)throw new Error(data.detail||res.statusText);return data}
+async function load(){const status=await api("/api/demo/status");out("status",status);if(status.credential_id){out("credential",(await api(`/api/credentials/${status.credential_id}`)).credential)}if(status.escrow_id){out("escrow",(await api(`/api/escrows/${status.escrow_id}`)).escrow)}}
+document.getElementById("seed").onclick=async()=>{const data=await api("/api/demo/seed","POST");out("credential",data.credential);out("escrow",data.escrow);await load()};
+document.getElementById("reset").onclick=async()=>{await api("/api/demo/reset","POST");out("credential",{});out("escrow",{});await load()};
+load().catch(err=>out("status",{error:err.message}));
+</script></body></html>"""
+
+
 def _html_escape(value: object) -> str:
     return (
         str(value or "")
@@ -2309,6 +2669,12 @@ def _require_admin(request: Request) -> None:
     if _is_admin_authorized(request):
         return
     raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def _api_role(request: Request, default: str = "candidate") -> str:
+    role = request.headers.get("x-atlas-role") or request.cookies.get("atlas_role") or default
+    normalized = "".join(char for char in role.lower() if char.isalnum() or char in ("_", "-"))
+    return normalized or default
 
 
 def _upload_onboarding_file(request: Request, file: UploadFile, kind: str) -> dict:
@@ -2378,65 +2744,8 @@ def _safe_photo_extension(filename: str | None, content_type: str | None) -> str
 
 
 @app.post("/api/demo/seed")
-def seed_demo() -> dict:
-    workflow = get_operations_workflow()
-    candidate_result = workflow.onboard_candidate(
-        Candidate(
-            first_name="Oleh",
-            last_name="Bondar",
-            email="oleh.bondar@example.com",
-            phone="+380991112233",
-            country_code="UA",
-            profession_code="welder",
-            languages=["uk", "pl"],
-            years_of_experience=6,
-            user_id="candidate-oleh",
-            metadata={
-                "desired_country_code": "PL",
-                "desired_salary": 6400,
-                "salary_currency": "PLN",
-                "ready_from": "2026-07-20",
-                "document_types": ["passport_or_id", "cv"],
-            },
-        )
-    )
-    employer_result = workflow.onboard_employer(
-        Employer(
-            company_name="North Steel Group",
-            contact_email="jobs@north-steel.example",
-            contact_phone="+48111222333",
-            country_code="PL",
-            industry="manufacturing",
-            verified=False,
-        )
-    )
-    vacancy = Vacancy(
-        employer_id=employer_result["employer"]["id"],
-        title="Welder",
-        country_code="PL",
-        profession_code="welder",
-        salary_min=5800,
-        salary_max=7200,
-        currency="PLN",
-        required_languages=["pl"],
-        required_documents=["passport_or_id", "cv"],
-        location="Poznan",
-        metadata={
-            "contract_type": "umowa_o_prace",
-            "work_permission_status": "to_be_verified",
-            "housing": True,
-            "housing_terms": "Employer provides shared housing with written terms.",
-            "salary_confirmed": True,
-            "people_needed": 4,
-            "requirements": ["mig_mag", "technical_drawing"],
-        },
-    )
-    pipeline_result = workflow.process_vacancy_pipeline(vacancy)
-    return {
-        "candidate": candidate_result,
-        "employer": employer_result,
-        "pipeline": pipeline_result,
-    }
+def seed_demo(request: Request) -> dict:
+    return get_colosseum_mvp_service().seed_demo(actor_id=_onboarding_owner_id(request))
 
 
 def _candidate_reply(profile: dict, ai_response: dict) -> str:

@@ -386,3 +386,50 @@ class MatchingRunPayload(BaseModel):
     candidate_id: str | None = None
     vacancy_id: str | None = None
     limit: int = Field(default=100, ge=1, le=1000)
+
+
+class CredentialRequestPayload(BaseModel):
+    candidate_id: str
+    issuer_id: str = "issuer-demo"
+    credential_type: str = "professional_certificate"
+    title: str = "Professional credential"
+    source_document_hash: str = ""
+    evidence: dict[str, Any] = Field(default_factory=dict)
+    demo: bool = False
+
+
+class CredentialDecisionPayload(BaseModel):
+    note: str = ""
+    reason: str = ""
+
+
+class EscrowCreatePayload(BaseModel):
+    employer_id: str
+    recruiter_id: str
+    candidate_id: str
+    job_id: str
+    total_amount: float = Field(gt=0)
+    currency_or_token: str = "DEVNET_SOL"
+    recruiter_share: float = Field(ge=0)
+    partner_share: float = Field(default=0, ge=0)
+    platform_share: float = Field(ge=0)
+    partner_id_optional: str = ""
+    milestone_type: str = "candidate_started_work"
+    dispute_window_hours: int = Field(default=72, ge=1, le=720)
+    refund_condition: str = "Milestone not approved before dispute window"
+    demo: bool = False
+
+
+class EscrowMilestonePayload(BaseModel):
+    note: str = ""
+    reason: str = ""
+
+
+class PrivacyDeleteRequestPayload(BaseModel):
+    contact: str = ""
+    note: str = ""
+
+
+class PrivacyRevokeConsentPayload(BaseModel):
+    consent_type: str = "ai_profiling"
+    reason: str = ""
