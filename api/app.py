@@ -38,6 +38,7 @@ from api.dependencies import (
     get_recruitment_workflow_service,
     get_rodo_service,
     get_skill_gap_service,
+    get_website_analytics_service,
 )
 from api.employer import EMPLOYER_HTML as EMPLOYER_CHAT_HTML
 from api.employer_onboarding_page import EMPLOYER_DASHBOARD_HTML, EMPLOYER_ONBOARDING_HTML
@@ -97,6 +98,7 @@ from api.schemas import (
     PrivacyRequestCreate,
     PrivacyDeleteRequestPayload,
     PrivacyRevokeConsentPayload,
+    PublicCounterSettingsUpdate,
     SkillGapAnalysisRequest,
     StatusUpdate,
     TargetCompetencyRequirement,
@@ -213,6 +215,16 @@ async def add_security_headers(request: Request, call_next):
         response.headers.setdefault(header, value)
     if request.url.scheme == "https":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
+@app.middleware("http")
+async def collect_visit_analytics(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        get_website_analytics_service().track_page_view(request, response)
+    except Exception:
+        pass
     return response
 
 _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
@@ -597,6 +609,7 @@ def register_user(payload: UserRegistration, request: Request, response: Respons
     )
     UserRepository(get_database()).add(user)
     _set_user_cookie(response, request, user.id)
+    _record_website_conversion("registration", request, user_id=user.id, params={"mode": "created"})
     return {"status": "ok", "user_id": user.id, "mode": "created"}
 
 
@@ -1052,6 +1065,7 @@ def complete_agent_onboarding(payload: AgentOnboardingComplete) -> dict:
     professional_dna = result.get("dashboard", {}).get("professional_dna", {})
     crm_sync = _sync_agent_profile_to_crm(payload.user_id, professional_dna)
     result["crm_sync"] = crm_sync
+    _record_website_conversion("profile_completed", None, user_id=payload.user_id, params={"source": "agent_profile"})
     return result
 
 
@@ -1082,6 +1096,7 @@ def complete_onboarding_workflow(request: Request) -> dict:
         raise HTTPException(status_code=400, detail=str(error)) from error
     professional_dna = result.get("dashboard", {}).get("professional_dna", {})
     result["crm_sync"] = _sync_agent_profile_to_crm(user_id, professional_dna)
+    _record_website_conversion("profile_completed", request, user_id=user_id, params={"source": "onboarding_workflow"})
     return result
 
 
@@ -1808,14 +1823,20 @@ def get_product_crm_workspace(request: Request, role: str = "admin") -> dict:
 
 
 @app.post("/api/analytics/event")
-def create_analytics_event(payload: AnalyticsEventCreate) -> dict:
+def create_analytics_event(payload: AnalyticsEventCreate, request: Request) -> dict:
     event = record_event(
         get_crm_service().activity,
         payload.name,
         payload.params,
         actor_id=payload.actor_id or "anonymous",
     )
-    return {"status": "ok", "event": event.to_dict()}
+    website_event = get_website_analytics_service().record_event(
+        payload.name,
+        request=request,
+        params=payload.params,
+        user_id=payload.actor_id if payload.actor_id != "anonymous" else None,
+    )
+    return {"status": "ok", "event": event.to_dict(), "website_event": website_event}
 
 
 @app.get("/api/admin/analytics")
@@ -1829,7 +1850,7 @@ def get_admin_analytics(
     user_role: str | None = None,
 ) -> dict:
     _require_admin(request)
-    return get_crm_service().internal_analytics(
+    internal = get_crm_service().internal_analytics(
         days=days,
         country=country,
         language=language,
@@ -1837,6 +1858,57 @@ def get_admin_analytics(
         traffic_source=traffic_source,
         user_role=user_role,
     )
+    return internal | {
+        "website": get_website_analytics_service().summary(
+            days=days,
+            filters={
+                "country": country,
+                "language": language,
+                "source": traffic_source,
+                "user_type": user_role,
+            },
+        )
+    }
+
+
+@app.get("/api/admin/analytics/visits")
+def get_visit_analytics(
+    request: Request,
+    days: int = 30,
+    country: str | None = None,
+    language: str | None = None,
+    source: str | None = None,
+    device: str | None = None,
+    user_type: str | None = None,
+) -> dict:
+    _require_admin(request)
+    return get_website_analytics_service().summary(
+        days=days,
+        filters={
+            "country": country,
+            "language": language,
+            "source": source,
+            "device": device,
+            "user_type": user_type,
+        },
+    )
+
+
+@app.get("/api/admin/analytics/public-counters")
+def get_public_counter_settings(request: Request) -> dict:
+    _require_admin(request)
+    return {"settings": get_website_analytics_service().public_counter_settings()}
+
+
+@app.patch("/api/admin/analytics/public-counters")
+def update_public_counter_settings(payload: PublicCounterSettingsUpdate, request: Request) -> dict:
+    _require_admin(request)
+    return {"settings": get_website_analytics_service().update_public_counter_settings(payload.counters)}
+
+
+@app.get("/api/public/counters")
+def get_public_counters() -> dict:
+    return get_website_analytics_service().public_counters()
 
 
 @app.get("/api/admin/first-vacancies-report")
@@ -2078,7 +2150,10 @@ def list_vacancies(request: Request, companyId: str | None = None, status: str |
 @app.post("/api/vacancies")
 def create_vacancy(payload: RecruitmentPayload, request: Request) -> dict:
     try:
-        return get_recruitment_workflow_service().create_vacancy(_onboarding_owner_id(request), payload.data)
+        user_id = _onboarding_owner_id(request)
+        result = get_recruitment_workflow_service().create_vacancy(user_id, payload.data)
+        _record_website_conversion("vacancy_created", request, user_id=user_id, params={"vacancy_id": result.get("vacancy", {}).get("id") or result.get("id")})
+        return result
     except PermissionError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
@@ -2204,7 +2279,10 @@ def public_job_page(vacancy_id: str) -> str:
 @app.post("/api/vacancies/{vacancy_id}/applications")
 def submit_job_application(vacancy_id: str, payload: RecruitmentPayload, request: Request) -> dict:
     try:
-        return get_recruitment_workflow_service().submit_application(_onboarding_owner_id(request), vacancy_id, payload.data)
+        user_id = _onboarding_owner_id(request)
+        result = get_recruitment_workflow_service().submit_application(user_id, vacancy_id, payload.data)
+        _record_website_conversion("job_application", request, user_id=user_id, params={"vacancy_id": vacancy_id})
+        return result
     except PermissionError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
@@ -2369,7 +2447,10 @@ def send_job_offer(offer_id: str, request: Request) -> dict:
 @app.post("/api/offers/{offer_id}/accept")
 def accept_job_offer(offer_id: str, request: Request) -> dict:
     try:
-        return get_recruitment_workflow_service().accept_offer(_onboarding_owner_id(request), offer_id)
+        user_id = _onboarding_owner_id(request)
+        result = get_recruitment_workflow_service().accept_offer(user_id, offer_id)
+        _record_website_conversion("candidate_hired", request, user_id=user_id, params={"offer_id": offer_id})
+        return result
     except PermissionError as error:
         raise HTTPException(status_code=403, detail=str(error)) from error
     except ValueError as error:
@@ -2758,6 +2839,18 @@ def _onboarding_owner_id(request: Request, allow_anonymous: bool = True) -> str:
         return ""
     client_host = request.client.host if request.client else "anonymous"
     return f"anonymous-{client_host}"
+
+
+def _record_website_conversion(
+    event_type: str,
+    request: Request | None,
+    user_id: str | None = None,
+    params: dict | None = None,
+) -> None:
+    try:
+        get_website_analytics_service().record_event(event_type, request=request, user_id=user_id, params=params or {})
+    except Exception:
+        pass
 
 
 def _safe_photo_extension(filename: str | None, content_type: str | None) -> str:

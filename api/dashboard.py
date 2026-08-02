@@ -409,6 +409,55 @@ DASHBOARD_HTML = """
     </section>
 
     <section>
+      <h2>Аналітика → Відвідуваність</h2>
+      <div class="form-grid">
+        <label>Period
+          <select id="visit-days" onchange="loadVisitAnalytics()">
+            <option value="7">7 days</option>
+            <option value="30" selected>30 days</option>
+            <option value="90">90 days</option>
+          </select>
+        </label>
+        <label>Country <input id="visit-country" placeholder="PL" oninput="debouncedVisitAnalytics()" /></label>
+        <label>Source
+          <select id="visit-source" onchange="loadVisitAnalytics()">
+            <option value="">All</option>
+            <option value="direct">Direct</option>
+            <option value="google">Google</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="facebook">Facebook</option>
+            <option value="telegram">Telegram</option>
+            <option value="campaign">Campaign</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>Device
+          <select id="visit-device" onchange="loadVisitAnalytics()">
+            <option value="">All</option>
+            <option value="phone">Phone</option>
+            <option value="tablet">Tablet</option>
+            <option value="desktop">Desktop</option>
+          </select>
+        </label>
+      </div>
+      <div class="metrics">
+        <div class="metric"><span>Unique today</span><strong id="v-unique-today">0</strong></div>
+        <div class="metric"><span>Unique 30d</span><strong id="v-unique-30">0</strong></div>
+        <div class="metric"><span>Page views</span><strong id="v-page-views">0</strong></div>
+        <div class="metric"><span>Online now</span><strong id="v-online">0</strong></div>
+        <div class="metric"><span>New visitors</span><strong id="v-new">0</strong></div>
+        <div class="metric"><span>Returning</span><strong id="v-returning">0</strong></div>
+      </div>
+      <div class="grid">
+        <section><h3>Popular pages</h3><table id="visit-pages"></table></section>
+        <section><h3>Traffic sources</h3><table id="visit-sources"></table></section>
+        <section><h3>Conversion funnel</h3><table id="visit-conversions"></table></section>
+        <section><h3>Devices and countries</h3><table id="visit-breakdown"></table></section>
+      </div>
+      <div class="notice" id="visit-status">Privacy-friendly analytics: no raw IP addresses or personal data in aggregate reports.</div>
+    </section>
+
+    <section>
       <h2 data-i18n="dashboard.quick_actions">Quick Actions</h2>
       <form id="match-form">
         <div class="form-grid">
@@ -537,6 +586,7 @@ DASHBOARD_HTML = """
   <script>
     let currentEmployers = [];
     let currentVacancies = [];
+    let visitAnalyticsTimer = null;
     function tr(key) {
       return window.AtlasI18n ? window.AtlasI18n.t(key) : key;
     }
@@ -613,6 +663,57 @@ DASHBOARD_HTML = """
       currentVacancies = await vacanciesRes.json();
       renderDashboard(data);
       renderSelects();
+      loadVisitAnalytics();
+    }
+    function debouncedVisitAnalytics() {
+      clearTimeout(visitAnalyticsTimer);
+      visitAnalyticsTimer = setTimeout(loadVisitAnalytics, 350);
+    }
+    async function loadVisitAnalytics() {
+      const params = new URLSearchParams();
+      params.set("days", document.getElementById("visit-days")?.value || "30");
+      const country = document.getElementById("visit-country")?.value.trim().toUpperCase();
+      const source = document.getElementById("visit-source")?.value;
+      const device = document.getElementById("visit-device")?.value;
+      if (country) params.set("country", country);
+      if (source) params.set("source", source);
+      if (device) params.set("device", device);
+      try {
+        const response = await fetch(`/api/admin/analytics/visits?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || "Analytics unavailable");
+        renderVisitAnalytics(data);
+      } catch (error) {
+        document.getElementById("visit-status").textContent = error.message;
+      }
+    }
+    function renderVisitAnalytics(data) {
+      document.getElementById("v-unique-today").textContent = data.unique_visitors?.today ?? 0;
+      document.getElementById("v-unique-30").textContent = data.unique_visitors?.["30_days"] ?? 0;
+      document.getElementById("v-page-views").textContent = data.page_views ?? 0;
+      document.getElementById("v-online").textContent = data.active_visitors_online ?? 0;
+      document.getElementById("v-new").textContent = data.new_visitors ?? 0;
+      document.getElementById("v-returning").textContent = data.returning_visitors ?? 0;
+      renderTable("visit-pages", ["Page", "Views"], (data.top_pages || []).map(item =>
+        `<tr><td>${escapeHtml(item.page)}</td><td>${escapeHtml(item.count)}</td></tr>`
+      ));
+      renderTable("visit-sources", ["Source", "Visits"], (data.traffic_sources || []).map(item =>
+        `<tr><td>${escapeHtml(item.source)}</td><td>${escapeHtml(item.count)}</td></tr>`
+      ));
+      const conversions = data.conversions || {};
+      renderTable("visit-conversions", ["Step", "Count"], [
+        ["Visitor → registration", conversions.visitor_to_registration],
+        ["Visitor → completed profile", conversions.visitor_to_completed_profile],
+        ["Visitor → job application", conversions.visitor_to_job_application],
+        ["Employer → created vacancy", conversions.employer_to_created_vacancy],
+        ["Candidate → employment", conversions.candidate_to_employment]
+      ].map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value ?? 0)}</td></tr>`));
+      const breakdownRows = [
+        ...(data.devices || []).map(item => `<tr><td>Device: ${escapeHtml(item.device)}</td><td>${escapeHtml(item.count)}</td></tr>`),
+        ...(data.countries || []).map(item => `<tr><td>Country: ${escapeHtml(item.country)}</td><td>${escapeHtml(item.count)}</td></tr>`)
+      ];
+      renderTable("visit-breakdown", ["Segment", "Count"], breakdownRows);
+      document.getElementById("visit-status").textContent = `Average session: ${Math.round(data.average_session_duration_seconds || 0)}s. Previous period views: ${data.comparison?.previous_period_page_views ?? 0}.`;
     }
     function renderSelects() {
       const employerSelect = document.getElementById("vacancy-employer");

@@ -403,10 +403,29 @@ class MatchingEngineService:
     def run(self, candidate_id: str | None = None, vacancy_id: str | None = None, limit: int = 100, actor_id: str = "system") -> dict[str, Any]:
         candidates = [self._candidate(candidate_id)] if candidate_id else self.candidates.list()
         vacancies = [self._vacancy(vacancy_id)] if vacancy_id else self._published_vacancies()
+        profiles_by_user = {profile.user_id: profile for profile in self.profiles.list()}
+        existing_by_pair = {
+            (match.candidate_id, match.vacancy_id): match
+            for match in self.matches.list()
+            if match.metadata.get("engine") == "matching_engine_v1"
+        }
         results: list[dict[str, Any]] = []
+        pending_matches: list[Match] = []
         for vacancy in vacancies[:limit]:
             for candidate in candidates[:limit]:
-                results.append(self._match(candidate, vacancy, actor_id))
+                results.append(
+                    self._match(
+                        candidate,
+                        vacancy,
+                        actor_id,
+                        existing_match=existing_by_pair.get((candidate.id, vacancy.id)),
+                        profile=profiles_by_user.get(candidate.user_id),
+                        lookup_existing=False,
+                        defer_persist=True,
+                        pending_matches=pending_matches,
+                    )
+                )
+        self._save_matches_batch(pending_matches)
         analytics = self._analytics(results)
         self._audit(actor_id, "matching_run_completed", {"candidate_id": candidate_id, "vacancy_id": vacancy_id, "count": len(results), "average_score": analytics["averageMatch"]})
         return {"runId": new_id("MRUN"), "status": "completed", "count": len(results), "matches": results, "analytics": analytics, "scaling": {"mode": "sync_v1", "supportsAsyncRecalculate": True, "cacheKeyStrategy": "candidate:v:profile_updated_at|vacancy:v:updatedAt", "indexKeys": ["candidate_id", "vacancy_id", "score", "recommendation", "updated_at"]}}
@@ -429,8 +448,19 @@ class MatchingEngineService:
         self._audit(actor_id, "matching_recalculated", {"match_id": match_id, "candidate_id": existing.candidate_id, "vacancy_id": existing.vacancy_id})
         return recalculated
 
-    def _match(self, candidate: Candidate, vacancy: Vacancy, actor_id: str, existing_match: Match | None = None) -> dict[str, Any]:
-        profile = next((item for item in self.profiles.list() if item.user_id == candidate.user_id), None)
+    def _match(
+        self,
+        candidate: Candidate,
+        vacancy: Vacancy,
+        actor_id: str,
+        existing_match: Match | None = None,
+        profile: ProfessionalDNA | None = None,
+        lookup_existing: bool = True,
+        defer_persist: bool = False,
+        pending_matches: list[Match] | None = None,
+    ) -> dict[str, Any]:
+        if profile is None:
+            profile = next((item for item in self.profiles.list() if item.user_id == candidate.user_id), None)
         normalized_profile = self.profile_normalizer.normalize(candidate, profile) if self.profile_normalizer else ProfileNormalizer().normalize(candidate, profile)
         normalized_vacancy = self.vacancy_normalizer.normalize(vacancy) if self.vacancy_normalizer else VacancyNormalizer().normalize(vacancy)
         components = {matcher.name: matcher.score(normalized_profile, normalized_vacancy) for matcher in self.component_matchers}
@@ -454,17 +484,37 @@ class MatchingEngineService:
             existing_match.score = overall
             existing_match.reasons = reasons
             existing_match.metadata = {**existing_match.metadata, **metadata, "recalculated_at": utc_now_iso()}
-            saved = self.matches.update(existing_match)
+            saved = self._defer_or_update(existing_match, defer_persist, pending_matches)
         else:
-            duplicate = self._existing(candidate.id, vacancy.id)
+            duplicate = self._existing(candidate.id, vacancy.id) if lookup_existing else None
             if duplicate:
                 duplicate.score = overall
                 duplicate.reasons = reasons
                 duplicate.metadata = {**duplicate.metadata, **metadata, "recalculated_at": utc_now_iso()}
-                saved = self.matches.update(duplicate)
+                saved = self._defer_or_update(duplicate, defer_persist, pending_matches)
             else:
-                saved = self.matches.add(Match(candidate_id=candidate.id, vacancy_id=vacancy.id, score=overall, reasons=reasons, metadata=metadata))
+                saved = Match(candidate_id=candidate.id, vacancy_id=vacancy.id, score=overall, reasons=reasons, metadata=metadata)
+                if defer_persist:
+                    if pending_matches is not None:
+                        pending_matches.append(saved)
+                else:
+                    saved = self.matches.add(saved)
         return self._match_response(saved)
+
+    def _defer_or_update(self, match: Match, defer_persist: bool, pending_matches: list[Match] | None) -> Match:
+        if defer_persist:
+            if pending_matches is not None:
+                pending_matches.append(match)
+            return match
+        return self.matches.update(match)
+
+    def _save_matches_batch(self, matches: list[Match]) -> None:
+        if not matches:
+            return
+        data = self.matches.database._load_collection(self.matches.collection)
+        for match in matches:
+            data[match.id] = match.to_dict()
+        self.matches.database._save_collection(self.matches.collection, data)
 
     def _match_response(self, match: Match) -> dict[str, Any]:
         return {

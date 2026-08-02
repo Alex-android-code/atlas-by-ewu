@@ -148,6 +148,10 @@ class AnalyticsEventCreate(BaseModel):
     actor_id: str = "anonymous"
 
 
+class PublicCounterSettingsUpdate(BaseModel):
+    counters: dict[str, bool] = Field(default_factory=dict)
+
+
 class LoginRequest(BaseModel):
     password: str
 

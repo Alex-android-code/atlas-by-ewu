@@ -14,6 +14,15 @@ Implemented or partial:
 - Consent revocation primitive.
 - Private file storage for documents.
 - No PII in Colosseum/Solana demo proof hashes.
+- First-party website analytics with anonymous visitor IDs, session cookies, bot/static request filtering, anonymized IP hashes, country-level-only location, aggregate reports, and no raw IP or personal data in public counters.
+
+Website analytics privacy rules:
+
+- `atlas_vid` identifies an anonymous visitor; `atlas_sid` identifies a 30-minute session.
+- Raw IP addresses are not stored in analytics records; only a salted short hash is retained for abuse protection and deduplication.
+- Public counters expose only enabled aggregate values: visitors, registered users, active vacancies, and successful employments.
+- Optional external analytics snippets remain disabled unless their environment variables are configured and the consent flow permits them.
+- Technical records should be retained only for the configured `ATLAS_ANALYTICS_RETENTION_DAYS` period, then deleted or aggregated.
 
 Open items:
 

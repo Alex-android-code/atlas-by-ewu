@@ -71,6 +71,7 @@ from services.recruitment_workflow import RecruitmentWorkflowService
 from services.matching_engine import MatchingEngineService
 from services.skill_gap_analysis import SkillGapService
 from services.product_architecture import ProductArchitectureService
+from services.analytics import WebsiteAnalyticsService
 from workflows.operations_workflow import OperationsWorkflow
 
 
@@ -95,6 +96,11 @@ def get_crm_service() -> CrmService:
         activity=ActivityRepository(database),
         memory_store=get_memory_store(),
     )
+
+
+@lru_cache(maxsize=1)
+def get_website_analytics_service() -> WebsiteAnalyticsService:
+    return WebsiteAnalyticsService(get_database())
 
 
 def get_operations_workflow() -> OperationsWorkflow:
