@@ -3,6 +3,13 @@
 *.log
 __pycache__/
 .pytest_cache/
+*.pyc
+.tmp-*/
+.tmp-*.txt
+dist/
+data/
+!data/.gitkeep
+docs/verification/
 data/db/*.json
 data/memory/*.json
 EWU_Data/

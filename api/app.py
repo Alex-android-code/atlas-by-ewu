@@ -186,6 +186,35 @@ app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 ONBOARDING_FILE_STORAGE = OnboardingFileStorage()
 app.include_router(ewu_bot_router)
 
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "font-src 'self' data:; "
+        "media-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'"
+    ),
+}
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
 _AI_MESSAGE_RATE_LIMIT: dict[str, list[float]] = {}
 AI_MESSAGE_LIMIT_PER_MINUTE = 20
 _ADMIN_SESSIONS: dict[str, float] = {}
